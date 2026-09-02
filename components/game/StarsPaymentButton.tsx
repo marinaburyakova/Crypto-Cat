@@ -1,55 +1,54 @@
 // components/game/StarsPaymentButton.tsx
+'use client';
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 interface StarsPaymentButtonProps {
-  amount: number;
+  amount?: number; // Знак вопроса делает свойство необязательным, исправляя TS2741
   onSuccess?: () => void;
   onError?: (error: Error) => void;
   disabled?: boolean;
   children?: React.ReactNode;
+  userId: string;
+  itemPriceStars: number;
+  itemSku: string;
+  itemName: string;
 }
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        openInvoice: (url: string, callback?: (status: string) => void) => void;
-        showAlert: (message: string) => void;
-        showConfirm: (message: string, callback: (confirmed: boolean) => void) => void;
-        close: () => void;
-        expand: () => void;
-        ready: () => void;
-        [key: string]: any;
-      };
-    };
-  }
-}
+// Блок declare global полностью УДАЛЕН, так как у вас уже есть рабочий types/telegram.d.ts (исправляет TS2717)
 
 export function StarsPaymentButton({
   amount,
   onSuccess,
   onError,
   disabled = false,
-  children
+  children,
+  userId,
+  itemPriceStars,
+  itemSku,
+  itemName,
 }: StarsPaymentButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTelegramEnv, setIsTelegramEnv] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const finalAmount = itemPriceStars || amount || 0;
+
   useEffect(() => {
     const checkTelegramEnv = () => {
-      const isTG = typeof window !== 'undefined' && 
-                   window.Telegram?.WebApp !== undefined;
-      
+      // Безопасное чтение глобального объекта, который уже объявлен в вашем types/telegram.d.ts
+      const isTG =
+        typeof window !== 'undefined' && (window as any).Telegram?.WebApp !== undefined;
+
       setIsTelegramEnv(isTG);
-      
+
       if (isTG) {
         console.log('✅ Telegram WebApp detected');
         try {
-          window.Telegram?.WebApp?.expand();
-          window.Telegram?.WebApp?.ready();
+          (window as any).Telegram.WebApp.expand();
+          (window as any).Telegram.WebApp.ready();
         } catch (error) {
           console.warn('⚠️ Could not expand Telegram WebApp:', error);
         }
@@ -71,7 +70,7 @@ export function StarsPaymentButton({
       return;
     }
 
-    if (!amount || amount <= 0) {
+    if (!finalAmount || finalAmount <= 0) {
       toast.error('Некорректная сумма для оплаты');
       return;
     }
@@ -80,19 +79,20 @@ export function StarsPaymentButton({
     setIsLoading(true);
 
     try {
-      if (isTelegramEnv && window.Telegram?.WebApp) {
-        console.log(`🚀 Starting payment with ${amount} stars`);
-        
+      if (isTelegramEnv && (window as any).Telegram?.WebApp) {
+        console.log(`🚀 Starting payment with ${finalAmount} stars`);
+
         try {
-          // Создаем инвойс через вашу API
-          const response = await fetch('/api/payment/create-invoice', {
+          const response = await fetch('/api/payments/stars-invoice', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              amount: amount,
-              description: `Покупка ${amount} звезд`,
+              userId,
+              itemPriceStars: finalAmount,
+              itemSku,
+              itemName,
             }),
           });
 
@@ -102,81 +102,46 @@ export function StarsPaymentButton({
           }
 
           const data = await response.json();
-          
-          if (!data.invoiceUrl) {
-            throw new Error('Invoice URL not received');
+          const targetInvoiceLink = data.invoiceLink;
+
+          if (!targetInvoiceLink) {
+            throw new Error('Invoice Link not received');
           }
 
           console.log('📄 Opening invoice...');
-          console.log('📄 Invoice URL:', data.invoiceUrl);
-          
-          // 🔥 ПРАВИЛЬНЫЙ ВЫЗОВ openInvoice
-          // В зависимости от версии Telegram WebApp, openInvoice может принимать:
-          // 1. Только URL: openInvoice(url)
-          // 2. URL и callback: openInvoice(url, callback)
-          
-          // Пробуем первый вариант (без callback)
-          try {
-            // Вариант 1: Без callback
-            window.Telegram.WebApp.openInvoice(data.invoiceUrl);
-            
-            // В этом случае мы не можем отследить статус оплаты,
-            // поэтому используем таймаут для снятия блокировки
-            setTimeout(() => {
+
+          // Вызов openInvoice из вашего официального типа
+          (window as any).Telegram.WebApp.openInvoice(
+            targetInvoiceLink,
+            (status: string) => {
+              console.log('💰 Invoice status:', status);
+
+              switch (status) {
+                case 'paid':
+                  toast.success(`🎉 Оплата успешна! ${finalAmount} звезд зачислено`);
+                  onSuccess?.();
+                  break;
+                case 'cancelled':
+                  toast.info('❌ Оплата отменена');
+                  break;
+                case 'failed':
+                  toast.error('❌ Оплата не удалась. Попробуйте позже');
+                  onError?.(new Error('Payment failed'));
+                  break;
+                case 'pending':
+                  toast.info('⏳ Оплата в обработке...');
+                  break;
+                default:
+                  console.warn('Unknown invoice status:', status);
+                  toast.info(`Статус оплаты: ${status}`);
+              }
+
               setIsProcessing(false);
               setIsLoading(false);
-            }, 5000);
-            
-            // Показываем информационное сообщение
-            toast.info('⏳ Оплата в обработке. Проверьте Telegram...');
-            
-            // Предполагаем успех (пользователь сам подтвердит через бота)
-            // Но вызываем onSuccess только если есть подтверждение с сервера
-            // Можно добавить вебхук для подтверждения
-            
-          } catch (invoiceError) {
-            console.warn('⚠️ openInvoice without callback failed, trying with callback...', invoiceError);
-            
-            // Вариант 2: С callback (если поддерживается)
-            try {
-              window.Telegram.WebApp.openInvoice(data.invoiceUrl, (status: string) => {
-                console.log('💰 Invoice status:', status);
-                
-                switch (status) {
-                  case 'paid':
-                    toast.success(`🎉 Оплата успешна! ${amount} звезд добавлено`);
-                    onSuccess?.();
-                    break;
-                    
-                  case 'cancelled':
-                    toast.info('❌ Оплата отменена');
-                    break;
-                    
-                  case 'failed':
-                    toast.error('❌ Оплата не удалась. Попробуйте позже');
-                    onError?.(new Error('Payment failed'));
-                    break;
-                    
-                  case 'pending':
-                    toast.info('⏳ Оплата в обработке...');
-                    break;
-                    
-                  default:
-                    console.warn('Unknown invoice status:', status);
-                    toast.info(`Статус оплаты: ${status}`);
-                }
-                
-                setIsProcessing(false);
-                setIsLoading(false);
-              });
-            } catch (callbackError) {
-              console.error('❌ Both openInvoice methods failed:', callbackError);
-              throw new Error('Failed to open invoice');
             }
-          }
-          
+          );
+
         } catch (error) {
-          console.error('Payment error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
           toast.error(`Ошибка оплаты: ${errorMessage}`);
           onError?.(error instanceof Error ? error : new Error(errorMessage));
@@ -184,30 +149,23 @@ export function StarsPaymentButton({
           setIsLoading(false);
         }
       } else {
-        // 💡 Режим разработки / демо
-        console.log('🎮 Demo mode: simulating stars purchase', amount);
-        
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        toast.success(`⭐ ${amount} звезд добавлено (демо-режим)`);
-        console.log(`✅ Demo: Added ${amount} stars`);
-        
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        toast.success(`⭐ ${finalAmount} звезд добавлено (демо-режим)`);
         onSuccess?.();
-        
+
         try {
           const currentStars = parseInt(localStorage.getItem('demoStars') || '0');
-          const newStars = currentStars + amount;
+          const newStars = currentStars + finalAmount;
           localStorage.setItem('demoStars', String(newStars));
-          console.log(`📊 Demo stars: ${currentStars} → ${newStars}`);
         } catch (storageError) {
           console.warn('Could not save to localStorage:', storageError);
         }
-        
+
         setIsProcessing(false);
         setIsLoading(false);
       }
-      
     } catch (error) {
       console.error('Payment handler error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
@@ -222,8 +180,8 @@ export function StarsPaymentButton({
     <Button
       onClick={handlePayment}
       disabled={disabled || isLoading || isProcessing}
-      className="w-full relative overflow-hidden transition-all duration-200"
-      variant={isTelegramEnv ? "default" : "outline"} size={''}    >
+      className="w-full relative overflow-hidden transition-all duration-200 cursor-pointer"
+      variant={isTelegramEnv ? 'default' : 'outline'} size={''}    >
       {isLoading ? (
         <span className="flex items-center gap-2">
           <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -235,13 +193,13 @@ export function StarsPaymentButton({
       ) : (
         children || (
           <span className="flex items-center gap-2">
-            ⭐ Купить {amount} звезд
+            ⭐ Купить за {finalAmount} звезд
           </span>
         )
       )}
-      
+
       {!isTelegramEnv && process.env.NODE_ENV === 'development' && (
-        <span className="absolute top-0 right-0 text-[8px] bg-yellow-500/20 px-1.5 py-0.5 rounded-bl text-yellow-700 dark:text-yellow-300">
+        <span className="absolute top-0 right-0 text-[8px] bg-yellow-500/20 px-1.5 py-0.5 rounded-bl text-yellow-700 dark:text-yellow-300 select-none">
           DEMO
         </span>
       )}
