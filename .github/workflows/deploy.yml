@@ -2,7 +2,7 @@ name: Deploy to Server
 
 on:
   push:
-    branches: [ main ]  # или ваша основная ветка
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -19,12 +19,18 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Build project
         run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Install production dependencies
         run: npm install --production
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Prepare deployment package
         run: |
