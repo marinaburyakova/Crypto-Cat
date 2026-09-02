@@ -1,11 +1,11 @@
-name: Deploy to Server
+name: Build & Deploy to Server
 
 on:
   push:
-    branches: [main]
+    branches: [ main, master ]
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,9 +16,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
@@ -28,6 +29,11 @@ jobs:
           GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
           GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
           NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Build project
         run: npm run build
@@ -62,13 +68,6 @@ jobs:
           cp package-lock.json deploy/
           cp -r public deploy/ 2>/dev/null || true
           cp -r prisma deploy/ 2>/dev/null || true
-          cp -r lib deploy/ 2>/dev/null || true
-          cp -r app deploy/ 2>/dev/null || true
-          cp -r components deploy/ 2>/dev/null || true
-          cp -r types deploy/ 2>/dev/null || true
-          cp -r certs deploy/ 2>/dev/null || true
-          cp next.config.ts deploy/ 2>/dev/null || true
-          cp tsconfig.json deploy/ 2>/dev/null || true
 
       - name: Deploy to server via SCP
         uses: appleboy/scp-action@v0.1.7
@@ -76,6 +75,6 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: 'deploy/*'
-          target: '/root/Crypto-Cat'
+          source: "deploy/*"
+          target: "/root/Crypto-Cat"
           strip_components: 1
