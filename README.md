@@ -1,1 +1,3 @@
 # Crypto-Cat
+ git add .
+ 

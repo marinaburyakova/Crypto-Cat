@@ -1,0 +1,55 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [ main ]  # или ваша основная ветка
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install production dependencies
+        run: npm install --production
+
+      - name: Prepare deployment package
+        run: |
+          mkdir deploy
+          cp -r .next deploy/
+          cp -r node_modules deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          cp -r public deploy/ 2>/dev/null || true
+          cp -r prisma deploy/ 2>/dev/null || true
+          cp -r lib deploy/ 2>/dev/null || true
+          cp -r app deploy/ 2>/dev/null || true
+          cp -r components deploy/ 2>/dev/null || true
+          cp -r types deploy/ 2>/dev/null || true
+          cp -r certs deploy/ 2>/dev/null || true
+          cp next.config.ts deploy/ 2>/dev/null || true
+          cp tsconfig.json deploy/ 2>/dev/null || true
+          cp .env deploy/ 2>/dev/null || true
+
+      - name: Deploy to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "deploy/*"
+          target: "/root/Crypto-Cat"
+          strip_components: 1
