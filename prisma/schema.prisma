@@ -1,0 +1,52 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+model User {
+  id              String         @id
+  points          BigInt         @default(0)
+  unclaimedPoints BigInt         @default(0)
+  level           Int            @default(1)
+  passiveRate     Int            @default(0)
+  nonce           Int            @default(0)
+  transactions    Transaction[]
+  chatMessages    ChatMessage[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Transaction {
+  id        String            @id @default(uuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  amount    Float
+  currency  CurrencyType
+  status    TransactionStatus @default(PENDING)
+  payload   String
+  createdAt DateTime          @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+enum CurrencyType {
+  TON
+  STARS
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}

@@ -1,0 +1,47 @@
+# .github/workflows/build.yml
+name: Next.js 16 Production Build
+
+# Настраиваем триггеры: запускать сборку при любом пуше или пулл-реквесте в главную ветку main
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-project:
+    # Запускаем сборку на чистой виртуальной машине Ubuntu (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      # Шаг 1: Скачиваем исходный код вашего репозитория на виртуальную машину
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Шаг 2: Устанавливаем Node.js (версия 20 или 22 идеально подходят для Next.js 16 и React 19)
+      - name: Setup Node.js environments
+        uses: actions/setup-node@v4
+        with:
+          node-node-version: 20
+          cache: 'npm' # Автоматически кэширует тяжелую папку node_modules для ускорения следующих сборок
+
+      # Шаг 3: Устанавливаем зависимости проекта (npm clean install)
+      - name: Install dependencies
+        run: npm ci
+
+      # Шаг 4: Генерируем типы Prisma Client.
+      # Мы передаем фейковый DATABASE_URL, чтобы генератор типов не упал во время сборки на GitHub
+      - name: Generate Prisma Client types
+        run: npx prisma generate
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mock_db?schema=public"
+
+      # Шаг 5: Компилируем production-версию Next.js 16.
+      # Во время компиляции Next.js проверяет строгий TypeScript во всех файлах (включая наш app/page.tsx)
+      - name: Build Next.js application
+        run: npm run build
+        env:
+          # Передаем обязательные переменные сборки в виде пустышек, чтобы компилятор не выдавал ошибок отсутствия строк
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mock_db?schema=public"
+          NEXT_PUBLIC_TELEGRAM_BOT_TOKEN: "mock_token"
+          GIGACHAT_CREDENTIALS: "mock_credentials"
