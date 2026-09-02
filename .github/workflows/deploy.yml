@@ -1,35 +1,81 @@
-- name: Install dependencies
-  run: npm install
-  env:
-    DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    REDIS_URL: ${{ secrets.REDIS_URL }}
-    TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-    MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
-    TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
-    GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
-    GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
-    NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+name: Deploy to Server
 
-- name: Build project
-  run: npm run build
-  env:
-    DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    REDIS_URL: ${{ secrets.REDIS_URL }}
-    TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-    MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
-    TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
-    GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
-    GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
-    NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+on:
+  push:
+    branches: [main]
 
-- name: Install production dependencies
-  run: npm install --production
-  env:
-    DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    REDIS_URL: ${{ secrets.REDIS_URL }}
-    TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-    MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
-    TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
-    GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
-    GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
-    NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
+          TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
+          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
+          GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
+          NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+
+      - name: Build project
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
+          TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
+          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
+          GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
+          NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+
+      - name: Install production dependencies
+        run: npm install --production
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          MERCHANT_WALLET_ADDRESS: ${{ secrets.MERCHANT_WALLET_ADDRESS }}
+          TON_RPC_ENDPOINT: ${{ secrets.TON_RPC_ENDPOINT }}
+          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
+          GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
+          NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+
+      - name: Prepare deployment package
+        run: |
+          mkdir deploy
+          cp -r .next deploy/
+          cp -r node_modules deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          cp -r public deploy/ 2>/dev/null || true
+          cp -r prisma deploy/ 2>/dev/null || true
+          cp -r lib deploy/ 2>/dev/null || true
+          cp -r app deploy/ 2>/dev/null || true
+          cp -r components deploy/ 2>/dev/null || true
+          cp -r types deploy/ 2>/dev/null || true
+          cp -r certs deploy/ 2>/dev/null || true
+          cp next.config.ts deploy/ 2>/dev/null || true
+          cp tsconfig.json deploy/ 2>/dev/null || true
+
+      - name: Deploy to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: 'deploy/*'
+          target: '/root/Crypto-Cat'
+          strip_components: 1
