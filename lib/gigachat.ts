@@ -1,5 +1,4 @@
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'crypto'
 
@@ -210,7 +209,7 @@ export class GigaChatEngine {
       ]
 
       const requestBody = {
-        model: 'GigaChat',
+        model: process.env.GIGACHAT_MODEL || 'GigaChat-2',
         messages,
         temperature: 0.7,
         max_tokens: 150,
