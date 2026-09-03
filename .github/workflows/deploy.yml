@@ -20,7 +20,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Этот шаг преобразует имя репозитория в нижний регистр
       - name: Convert repository name to lowercase
         run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
@@ -39,10 +38,18 @@ jobs:
         with:
           context: .
           push: true
-          # ✅ Используем переменную REPO_LOWER вместо GITHUB_REPOSITORY
           tags: |
             ghcr.io/${{ env.REPO_LOWER }}:latest
             ghcr.io/${{ env.REPO_LOWER }}:${{ github.sha }}
+          build-args: |
+            DATABASE_URL=${{ secrets.DATABASE_URL }}  # ✅ Добавить это!
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            GIGACHAT_CREDENTIALS=${{ secrets.GIGACHAT_CREDENTIALS }}
+            GIGACHAT_SCOPE=${{ secrets.GIGACHAT_SCOPE }}
+            NODE_TLS_REJECT_UNAUTHORIZED=${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            MERCHANT_WALLET_ADDRESS=${{ secrets.MERCHANT_WALLET_ADDRESS }}
+            TON_RPC_ENDPOINT=${{ secrets.TON_RPC_ENDPOINT }}
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
