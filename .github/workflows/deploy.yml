@@ -83,7 +83,6 @@ jobs:
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
 
-
             pm2 delete crypto-cat 2>/dev/null || true
             pm2 start npm --name "crypto-cat" -- start -- -H 0.0.0.0 -p 3000
             pm2 save
