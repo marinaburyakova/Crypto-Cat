@@ -2,7 +2,7 @@ name: Deploy via Docker Compose
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   deploy:
@@ -53,9 +53,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            mkdir -p /root/Crypto-Cat
             cd /root/Crypto-Cat
             docker-compose pull app
+            docker-compose down app
             docker-compose up -d app
             docker-compose logs --tail=30 app
-            docker image prune -f
+            docker system prune -f --filter "until=24h"
