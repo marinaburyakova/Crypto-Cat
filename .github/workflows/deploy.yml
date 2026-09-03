@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # 🔑 Это ключевое!
+      packages: write
 
     steps:
       - name: Checkout code
@@ -53,7 +53,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            cd /root/Crypto-Cat || mkdir -p /root/Crypto-Cat && cd /root/Crypto-Cat
+            mkdir -p /root/Crypto-Cat
+            cd /root/Crypto-Cat
 
             if [ ! -f docker-compose.yml ]; then
               curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/compose.yaml -o docker-compose.yml
@@ -68,6 +69,6 @@ jobs:
             echo "MERCHANT_WALLET_ADDRESS=${{ secrets.MERCHANT_WALLET_ADDRESS }}" >> .env
             echo "TON_RPC_ENDPOINT=${{ secrets.TON_RPC_ENDPOINT }}" >> .env
 
-            docker compose pull app
-            docker compose up -d app
-            docker compose logs --tail=30 app
+            docker-compose pull app
+            docker-compose up -d app
+            docker-compose logs --tail=30 app
