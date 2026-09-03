@@ -1,13 +1,11 @@
-
-
+/* app/globals.css */
 @import "tailwindcss";
 
 @theme {
-  /* Кастомные шрифты */
   --font-sans: "Inter", "Geist Sans", sans-serif;
 }
 
-/* Анимации нужно определять отдельно */
+/* Анимации */
 @keyframes clickPop {
   0% {
     transform: translateY(0) scale(0.8) rotate(0deg);
@@ -23,25 +21,22 @@
   }
 }
 
-/* Для анимации используем утилиту */
 @utility animate-click-pop {
   animation: clickPop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-/* Сглаживание скроллбаров и глобальные стили */
+/* Глобальные стили */
 html, body {
-  background-color: #09090b; /* zinc-950 */
-  color: #fafafa; /* zinc-50 */
+  background-color: #09090b;
+  color: #fafafa;
   overflow-x: hidden;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Обводка для вылетающего текста очков (+10), чтобы читалось на любом фоне */
 @utility text-stroke {
-  -webkit-text-stroke: 2px #18181b; /* zinc-900 */
+  -webkit-text-stroke: 2px #18181b;
 }
 
-/* Скрытие стандартного скроллбара для мобильных Mini Apps */
 @utility scrollbar-none {
   &::-webkit-scrollbar {
     display: none;

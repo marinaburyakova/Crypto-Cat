@@ -1,10 +1,11 @@
-datasource db {
-  provider = "postgresql"
-}
-
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
   engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
 }
 
 model User {
@@ -14,30 +15,44 @@ model User {
   level           Int            @default(1)
   passiveRate     Int            @default(0)
   nonce           Int            @default(0)
+  energy          Int            @default(1000)
+  maxEnergy       Int            @default(1000)
+  exp             Int            @default(0)
   transactions    Transaction[]
   chatMessages    ChatMessage[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+
+  @@index([id])
+  @@index([level])
+  @@index([createdAt])
 }
 
 model Transaction {
   id        String            @id @default(uuid())
   userId    String
-  user      User              @relation(fields: [userId], references: [id])
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Float
   currency  CurrencyType
   status    TransactionStatus @default(PENDING)
   payload   String
   createdAt DateTime          @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model ChatMessage {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  role      String   
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
   content   String   @db.Text
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 enum CurrencyType {

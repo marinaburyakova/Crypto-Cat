@@ -1,12 +1,21 @@
 // instrumentation.ts
 export async function register() {
-  // Проверяем, что код выполняется строго на серверной стороне Node.js рантайма
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { initSyncWorker } = await import('@lib/sync-worker');
-    const { initTonPaymentWorker } = await import('@lib/ton-worker');
-    
-    initSyncWorker();
-    initTonPaymentWorker();
-    console.log('🏁 [SYSTEM] Все фоновые воркеры (Клик-агрегатор и TON-валидатор) успешно запущены.');
+    try {
+      // Проверяем доступность Redis перед запуском
+      const { isRedisAvailable } = await import('@lib/redis');
+      const available = await isRedisAvailable();
+      
+      if (available) {
+        const { syncWorker } = await import('@lib/sync-worker');
+        // Запускаем синхронизацию с задержкой
+        setTimeout(syncWorker, 3000);
+        console.log('✅ Sync worker initialized');
+      } else {
+        console.warn('⚠️ Redis not available, sync worker not started');
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize sync worker:', error);
+    }
   }
 }

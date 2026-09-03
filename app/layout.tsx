@@ -1,7 +1,7 @@
 // app/layout.tsx
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Inter } from "next/font/google";
 import "./global.css";
 
@@ -10,33 +10,50 @@ const inter = Inter({
   variable: "--font-sans",
 });
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [isTelegramReady, setIsTelegramReady] = useState(false);
+
   useEffect(() => {
-    // Безопасная инициализация на самом верхнем уровне приложения (Client-side)
-    if (typeof window !== 'undefined') {
-      const isTelegram = window.location.search.includes('tgWeb') || (window as any).Telegram?.WebApp?.initData;
-      if (isTelegram) {
-        // Динамически и безопасно импортируем SDK внутри браузера смартфона
-        import('@telegram-apps/sdk-react').then((sdk) => {
-          try {
-            sdk.init();
-            console.log('✅ [TELEGRAM GLOBAL] Контекст оплат Stars успешно зафиксирован!');
-          } catch (e) {
-            console.error('Ошибка инициализации Telegram SDK:', e);
-          }
-        });
+    const initTelegram = async () => {
+      if (typeof window === 'undefined') return;
+      
+      const isTelegram = !!(window.Telegram?.WebApp?.initData || 
+                          window.location.search.includes('tgWebAppData'));
+      
+      if (!isTelegram) {
+        console.log('📱 Not in Telegram environment - Demo mode');
+        setIsTelegramReady(true);
+        return;
       }
-    }
+
+      try {
+        const sdk = await import('@telegram-apps/sdk-react');
+        await sdk.init();
+        
+        if (window.Telegram?.WebApp) {
+          window.Telegram.WebApp.ready();
+          window.Telegram.WebApp.expand();
+        }
+        
+        setIsTelegramReady(true);
+      } catch (error) {
+        console.error('❌ Telegram initialization error:', error);
+        setIsTelegramReady(true);
+      }
+    };
+
+    initTelegram();
   }, []);
 
   return (
     <html lang="ru" className={`${inter.variable} antialiased`}>
-      <body className="bg-zinc-950 text-zinc-50 min-h-screen antialiased">
-        <main className="relative flex flex-col min-h-screen max-w-md mx-auto bg-zinc-950 shadow-2xl border-x border-zinc-900 overflow-hidden w-full">
-          <div className="flex-1 w-full p-4 pb-24 flex flex-col justify-between">
-            {children}
-          </div>
+      <body className="bg-zinc-950 text-zinc-50 min-h-screen antialiased overflow-hidden">
+        <main className="relative flex flex-col h-screen max-w-md mx-auto bg-zinc-950 shadow-2xl border-x border-zinc-900 overflow-hidden w-full">
+          {children}
         </main>
       </body>
     </html>

@@ -5,6 +5,10 @@ declare global {
   interface Window {
     Telegram?: {
       WebApp?: {
+        BackButton: any;
+        MainButton: any;
+        openTelegramLink(url: string): unknown;
+        openLink: any;
         ready: () => void;
         close: () => void;
         expand: () => void;

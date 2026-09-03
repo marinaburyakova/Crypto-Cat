@@ -1,59 +1,100 @@
 // app/api/clicks/route.ts
-import { NextResponse } from 'next/server';
-import { redis } from '@lib/redis';
-import { prisma } from '@lib/prisma';
+import { NextRequest, NextResponse } from 'next/server'
 
-const BATCH_INTERVAL_SECONDS = 3;
-const MAX_CLICKS_PER_SECOND = 20; 
-const MAX_ALLOWED_CLICKS = BATCH_INTERVAL_SECONDS * MAX_CLICKS_PER_SECOND;
+// Временное хранилище в памяти (для демо)
+// В реальном проекте используйте базу данных
+const userData: Record<string, { points: number; energy: number; maxEnergy: number }> = {}
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId, clicks } = await req.json();
+    const body = await request.json()
+    const { userId, clicks } = body
 
-    if (!userId || typeof clicks !== 'number' || clicks < 0) {
-      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'UserId is required' },
+        { status: 400 }
+      )
     }
 
-    if (clicks > MAX_ALLOWED_CLICKS) {
-      await redis.hset(`user:${userId}:flags`, 'suspicious_activity', 'true');
-      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+    // Инициализируем пользователя если его нет
+    if (!userData[userId]) {
+      userData[userId] = {
+        points: 0,
+        energy: 1000,
+        maxEnergy: 1000,
+      }
     }
 
-    const redisUserKey = `user:${userId}:state`;
-    const pointsToAdd = clicks * 10;
-    const exists = await redis.exists(redisUserKey);
-    let currentPoints = 0;
+    const user = userData[userId]
 
-    if (!exists) {
-      const dbUser = await prisma.user.upsert({
-        where: { id: userId },
-        update: {},
-        create: {
-          id: userId,
-          points: 0,
-          unclaimedPoints: 0,
-          level: 1,
-          passiveRate: 0
-        }
-      });
+    // Если есть клики - обрабатываем их
+    if (clicks && clicks > 0) {
+      // Проверяем достаточно ли энергии
+      if (user.energy < clicks) {
+        return NextResponse.json(
+          { error: 'Not enough energy' },
+          { status: 400 }
+        )
+      }
 
-      currentPoints = Number(dbUser.points) + pointsToAdd;
-      await redis.hmset(redisUserKey, {
-        points: currentPoints.toString(),
-        uncommitted_points: pointsToAdd.toString()
-      });
-    } else {
-      currentPoints = await redis.hincrby(redisUserKey, 'points', pointsToAdd);
-      await redis.hincrby(redisUserKey, 'uncommitted_points', pointsToAdd);
+      // Начисляем очки (10 за каждый клик)
+      user.points += clicks * 10
+      // Тратим энергию
+      user.energy -= clicks
     }
 
-    if (clicks > 0) {
-      await redis.sadd('users:pending_sync', userId);
-    }
-
-    return NextResponse.json({ success: true, points: currentPoints });
+    // Возвращаем обновленные данные
+    return NextResponse.json({
+      success: true,
+      points: user.points,
+      energy: user.energy,
+      maxEnergy: user.maxEnergy,
+    })
   } catch (error) {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Error processing clicks:', error)
+    return NextResponse.json(
+      { error: 'Failed to process clicks' },
+      { status: 500 }
+    )
+  }
+}
+
+// GET метод для получения данных пользователя
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const userId = searchParams.get('userId')
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'UserId is required' },
+        { status: 400 }
+      )
+    }
+
+    // Инициализируем пользователя если его нет
+    if (!userData[userId]) {
+      userData[userId] = {
+        points: 0,
+        energy: 1000,
+        maxEnergy: 1000,
+      }
+    }
+
+    const user = userData[userId]
+
+    return NextResponse.json({
+      success: true,
+      points: user.points,
+      energy: user.energy,
+      maxEnergy: user.maxEnergy,
+    })
+  } catch (error) {
+    console.error('Error fetching user data:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch user data' },
+      { status: 500 }
+    )
   }
 }

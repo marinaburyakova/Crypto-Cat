@@ -1,66 +1,80 @@
 // lib/sync-worker.ts
-import { redis } from '@lib/redis';
+import { safeRedis, isRedisAvailable } from '@lib/redis';
 import { prisma } from '@lib/prisma';
 
 let isSyncing = false;
 
-export function initSyncWorker() {
-  // Запускаем фоновый цикл синхронизации каждые 10 секунд
-  setInterval(async () => {
-    if (isSyncing) return; // Защита от наложения циклов, если база данных перегружена
-    isSyncing = true;
+export async function syncWorker() {
+  if (isSyncing) return;
+  
+  // Проверяем доступность Redis
+  const redisAvailable = await isRedisAvailable();
+  if (!redisAvailable) {
+    console.warn('⚠️ Redis not available, skipping sync');
+    return;
+  }
 
-    try {
-      // 1. Получаем список всех пользователей, у которых изменился баланс
-      const pendingUsers = await redis.smembers('users:pending_sync');
-      if (pendingUsers.length === 0) {
-        isSyncing = false;
-        return;
-      }
+  isSyncing = true;
 
-      // 2. Формируем пакетные запросы (Batching) для Prisma 7
-      const updates = pendingUsers.map(async (userId) => {
-        const redisUserKey = `user:${userId}:state`;
+  try {
+    // Получаем список всех пользователей, у которых изменились данные
+    const pendingUsers = await safeRedis.smembers('users:pending_sync');
+    
+    if (!pendingUsers || pendingUsers.length === 0) {
+      isSyncing = false;
+      return;
+    }
+
+    console.log(`🔄 Syncing ${pendingUsers.length} users...`);
+
+    for (const userId of pendingUsers) {
+      try {
+        // Получаем данные пользователя из Redis
+        const userData = await safeRedis.hgetall(`user:${userId}`);
         
-        // Извлекаем накопленные несинхронизированные поинты
-        const uncommittedStr = await redis.hget(redisUserKey, 'uncommitted_points');
-        const totalPointsStr = await redis.hget(redisUserKey, 'points');
-        
-        const uncommitted = parseInt(uncommittedStr || '0', 10);
-        const totalPoints = parseInt(totalPointsStr || '0', 10);
-
-        if (uncommitted > 0) {
-          // Обновляем PostgreSQL через транзакцию Prisma
+        if (userData && Object.keys(userData).length > 0) {
+          // Сохраняем в PostgreSQL
           await prisma.user.upsert({
             where: { id: userId },
             update: {
-              points: totalPoints,
-              unclaimedPoints: { increment: uncommitted }
+              points: parseInt(userData.points || '0'),
+              energy: parseInt(userData.energy || '1000'),
+              maxEnergy: parseInt(userData.maxEnergy || '1000'),
+              level: parseInt(userData.level || '1'),
+              exp: parseInt(userData.exp || '0'),
+              updatedAt: new Date(),
             },
             create: {
               id: userId,
-              points: totalPoints,
-              unclaimedPoints: uncommitted,
-              level: 1,
-              passiveRate: 0
-            }
+              points: parseInt(userData.points || '0'),
+              energy: parseInt(userData.energy || '1000'),
+              maxEnergy: parseInt(userData.maxEnergy || '1000'),
+              level: parseInt(userData.level || '1'),
+              exp: parseInt(userData.exp || '0'),
+            },
           });
-
-          // Сбрасываем буфер несинхронизированных очков в Redis
-          await redis.hincrby(redisUserKey, 'uncommitted_points', -uncommitted);
         }
-        
-        // Удаляем пользователя из очереди на синхронизацию
-        await redis.srem('users:pending_sync', userId);
-      });
 
-      // Выполняем все обновления параллельно в рамках одного тика воркера
-      await Promise.all(updates);
-
-    } catch (error) {
-      console.error('Ошибка фоновой синхронизации воркера:', error);
-    } finally {
-      isSyncing = false;
+        // Удаляем из списка на синхронизацию
+        await safeRedis.srem('users:pending_sync', userId);
+      } catch (error) {
+        console.error(`❌ Error syncing user ${userId}:`, error);
+      }
     }
-  }, 10000); // 10000 мс = 10 секунд
+
+    console.log('✅ Sync completed');
+  } catch (error) {
+    console.error('❌ Sync worker error:', error);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// Запускаем синхронизацию каждые 30 секунд только в production
+if (process.env.NODE_ENV === 'production') {
+  // Первый запуск с задержкой
+  setTimeout(syncWorker, 5000);
+  
+  // Периодический запуск
+  setInterval(syncWorker, 30000);
 }
