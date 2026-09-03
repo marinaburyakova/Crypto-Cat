@@ -83,6 +83,13 @@ jobs:
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
 
+            sudo npm uninstall -g pm2 || true
+            sudo rm -rf /usr/local/lib/node_modules/pm2 || true
+            sudo rm -f /usr/local/bin/pm2 || true
+
+            sudo npm install -g pm2
+
             pm2 delete crypto-cat 2>/dev/null || true
-            pm2 start npm --name "crypto-cat" -- start -- -H 0.0.0.0 -p 3000
-            pm2 save
+            pm2 start npm --name "crypto-cat" -- start -- -H 0.0.0.0 -p 3000 || nohup npm start -- -H 0.0.0.0 -p 3000 > next.log 2>&1 &
+
+            pm2 save 2>/dev/null || true
