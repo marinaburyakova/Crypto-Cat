@@ -20,6 +20,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ✅ Этот шаг преобразует имя репозитория в нижний регистр
+      - name: Convert repository name to lowercase
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -35,10 +39,10 @@ jobs:
         with:
           context: .
           push: true
-          # ✅ Исправлено: имя репозитория приведено к нижнему регистру
+          # ✅ Используем переменную REPO_LOWER вместо GITHUB_REPOSITORY
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LOWER }}:latest
+            ghcr.io/${{ env.REPO_LOWER }}:${{ github.sha }}
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
@@ -48,7 +52,7 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
             cd /root/Crypto-Cat || exit 1
-            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull ghcr.io/${{ env.REPO_LOWER }}:latest
             docker-compose down app || true
             docker-compose up -d app
             sleep 10
