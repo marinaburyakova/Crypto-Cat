@@ -33,6 +33,15 @@ jobs:
           tags: ghcr.io/${{ env.REPO_LOWER }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            GIGACHAT_CREDENTIALS=${{ secrets.GIGACHAT_CREDENTIALS }}
+            GIGACHAT_SCOPE=${{ secrets.GIGACHAT_SCOPE }}
+            NODE_TLS_REJECT_UNAUTHORIZED=${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            MERCHANT_WALLET_ADDRESS=${{ secrets.MERCHANT_WALLET_ADDRESS }}
+            TON_RPC_ENDPOINT=${{ secrets.TON_RPC_ENDPOINT }}
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
