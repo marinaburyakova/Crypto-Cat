@@ -1,4 +1,3 @@
-// app/api/ai/chat/route.ts
 import { NextResponse } from 'next/server'
 import { gigachatEngine } from '@/lib/gigachat'
 
