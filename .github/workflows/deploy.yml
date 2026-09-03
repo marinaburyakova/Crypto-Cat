@@ -59,22 +59,34 @@ jobs:
           GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
           NODE_TLS_REJECT_UNAUTHORIZED: ${{ secrets.NODE_TLS_REJECT_UNAUTHORIZED }}
 
+      # ОПТИМИЗАЦИЯ: Архивируем проект, чтобы перенести триллион файлов Three.js за 5 секунд
       - name: Prepare deployment package
         run: |
-          mkdir deploy
-          cp -r .next deploy/
-          cp -r node_modules deploy/
-          cp package.json deploy/
-          cp package-lock.json deploy/
-          cp -r public deploy/ 2>/dev/null || true
-          cp -r prisma deploy/ 2>/dev/null || true
+          tar -czf deploy.tar.gz .next node_modules package.json package-lock.json public prisma 2>/dev/null || tar -czf deploy.tar.gz .next node_modules package.json package-lock.json
 
-      - name: Deploy to server via SCP
+      # Шаг 1: Быстро отправляем ОДИН архив вместо тысяч мелких файлов
+      - name: Deploy archive to server via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "deploy/*"
+          source: "deploy.tar.gz"
           target: "/root/Crypto-Cat"
-          strip_components: 1
+
+      # Шаг 2: Распаковываем архив на сервере и ПЕРЕЗАПУСКАЕМ PM2 автоматически
+      - name: Extract package and Restart PM2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            cd /root/Crypto-Cat
+            tar -xzf deploy.tar.gz
+            rm deploy.tar.gz
+            
+            # Настройка правильного старта на 0.0.0.0 порт 3000 через PM2
+            pm2 delete crypto-cat 2>/dev/null || true
+            pm2 start npm --name "crypto-cat" -- start -- -H 0.0.0.0 -p 3000
+            pm2 save
