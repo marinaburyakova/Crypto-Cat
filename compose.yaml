@@ -7,28 +7,61 @@ services:
       POSTGRES_PASSWORD: clicker_super_password
       POSTGRES_DB: crypto_clicker
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clicker_admin -d crypto_clicker"]
+      test: ['CMD-SHELL', 'pg_isready -U clicker_admin -d crypto_clicker']
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: always
+    networks:
+      - app-network
 
   redis:
     image: redis:7.4-alpine
     container_name: clicker_redis
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: always
+    networks:
+      - app-network
+
+  app:
+    image: ghcr.io/marinaburyakova/crypto-cat:latest
+    container_name: crypto-clicker-app
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://clicker_admin:clicker_super_password@postgres:5432/crypto_clicker
+      REDIS_URL: redis://redis:6379
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE}
+      NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MERCHANT_WALLET_ADDRESS: ${MERCHANT_WALLET_ADDRESS}
+      TON_RPC_ENDPOINT: ${TON_RPC_ENDPOINT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - app-network
 
 volumes:
   pgdata:
   redisdata:
+
+networks:
+  app-network:
+    driver: bridge
