@@ -95,6 +95,8 @@ export class GigaChatEngine {
     })
 
     try {
+      console.log('🔑 Requesting GigaChat token...')
+
       const response = await this.fetchWithTimeout(this.config.authUrl, {
         method: 'POST',
         headers: {
@@ -108,6 +110,7 @@ export class GigaChatEngine {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('❌ OAuth error:', response.status, errorText)
         throw new Error(
           `OAuth failed: ${response.status} - ${errorText.substring(0, 100)}`,
         )
@@ -116,21 +119,20 @@ export class GigaChatEngine {
       const data = await response.json()
 
       if (!data.access_token || typeof data.access_token !== 'string') {
+        console.error('❌ Invalid token response:', data)
         throw new Error('Invalid access_token in response')
       }
 
       this.accessToken = data.access_token
       this.tokenExpiry = data.expires_at || Date.now() + 3600000
 
+      console.log('✅ GigaChat token acquired successfully')
+
       return this.accessToken as string
     } catch (error) {
       this.accessToken = null
       this.tokenExpiry = 0
-
-      console.error(
-        '❌ GigaChat authentication failed:',
-        error instanceof Error ? error.message : 'Unknown error',
-      )
+      console.error('❌ GigaChat authentication failed:', error)
       throw new Error('Failed to authenticate with GigaChat API')
     }
   }
