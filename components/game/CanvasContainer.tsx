@@ -21,7 +21,7 @@ export function CanvasContainer({ onVisualClick }: CanvasContainerProps) {
         <ambientLight intensity={0.7} />
         <directionalLight 
           position={[5, 10, 5]} 
-          intensity={1.5} 
+          intensity={0.5} 
           castShadow 
           shadow-mapSize={[1024, 1024]}
         />
