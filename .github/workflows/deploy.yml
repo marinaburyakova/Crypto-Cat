@@ -42,7 +42,7 @@ jobs:
             ghcr.io/${{ env.REPO_LOWER }}:latest
             ghcr.io/${{ env.REPO_LOWER }}:${{ github.sha }}
           build-args: |
-            DATABASE_URL=${{ secrets.DATABASE_URL }}  # ✅ Добавить это!
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             GIGACHAT_CREDENTIALS=${{ secrets.GIGACHAT_CREDENTIALS }}
             GIGACHAT_SCOPE=${{ secrets.GIGACHAT_SCOPE }}
@@ -50,6 +50,8 @@ jobs:
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             MERCHANT_WALLET_ADDRESS=${{ secrets.MERCHANT_WALLET_ADDRESS }}
             TON_RPC_ENDPOINT=${{ secrets.TON_RPC_ENDPOINT }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
@@ -59,9 +61,28 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
             cd /root/Crypto-Cat || exit 1
+
+            docker tag ghcr.io/${{ env.REPO_LOWER }}:latest ghcr.io/${{ env.REPO_LOWER }}:previous || true
+
             docker pull ghcr.io/${{ env.REPO_LOWER }}:latest
+
             docker-compose down app || true
+
             docker-compose up -d app
-            sleep 10
+
+            sleep 20
+
+            if docker ps | grep -q app; then
+              echo "Application started successfully"
+            else
+              echo "Application failed to start. Rolling back..."
+              docker tag ghcr.io/${{ env.REPO_LOWER }}:previous ghcr.io/${{ env.REPO_LOWER }}:latest
+              docker-compose up -d app
+              exit 1
+            fi
+
             docker-compose exec -T app npx prisma migrate deploy || true
+
             docker system prune -f --filter "until=24h" || true
+
+            echo "Deployment completed successfully"
