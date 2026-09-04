@@ -1,13 +1,24 @@
-// app/page.tsx
-'use client'
-import { GameUI } from '@/components/game/GameUI';
 
-export default function HomePage() {
-  const userId = 'guest_user_demo_1337';
+'use client'
+
+import { useEffect } from 'react'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // Проверяем, что мы в Telegram
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.ready()
+      window.Telegram.WebApp.expand()
+    }
+  }, [])
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 overflow-hidden">
-      <GameUI userId={userId} />
-    </div>
-  );
+    <html>
+      <head>
+        {/* Telegram WebApp SDK */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
+      </head>
+      <body>{children}</body>
+    </html>
+  )
 }

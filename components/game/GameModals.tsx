@@ -13,7 +13,7 @@ interface GameModalsProps {
   onBuyStars: (amount: number) => Promise<void>
   onBuyTon: (amount: number) => Promise<void>
   isBuying: boolean
-  
+
   showTonModal: boolean
   onCloseTon: () => void
   userId: string

@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Sparkles, Loader2, Zap } from 'lucide-react'
+import { X, Sparkles, Loader2 } from 'lucide-react'
 
 // Цены в Stars
 const STARS_PRICES = {
@@ -64,7 +64,6 @@ export function EnergyModal({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Заголовок */}
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center text-2xl shadow-lg shadow-yellow-500/30">
             ⚡
@@ -152,7 +151,6 @@ export function EnergyModal({
           })}
         </div>
 
-        {/* Инфо */}
         <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
           <p className="text-[10px] text-amber-400 text-center flex items-center justify-center gap-2">
             <Sparkles className="w-3 h-3" />
@@ -162,7 +160,6 @@ export function EnergyModal({
           </p>
         </div>
 
-        {/* Текущий баланс */}
         <div className="mt-3 flex justify-between text-xs text-slate-500">
           <span>⭐ {userStars.toLocaleString()}</span>
           <span>⚡ {currentEnergy} / {maxEnergy}</span>
