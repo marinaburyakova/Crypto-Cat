@@ -22,7 +22,7 @@ model User {
   totalSpent      Float          @default(0)
   transactions    Transaction[]
   chatMessages    ChatMessage[]
-  purchases       Purchase[]
+  pointHistory    PointHistory[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -32,18 +32,25 @@ model User {
 }
 
 model Transaction {
-  id        String            @id @default(uuid())
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount    Float
-  currency  CurrencyType
-  status    TransactionStatus @default(PENDING)
-  payload   String
-  createdAt DateTime          @default(now())
+  id          String            @id @default(uuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Float
+  currency    CurrencyType
+  status      TransactionStatus @default(PENDING)
+  payload     String            @unique  
+  sku         String?                    
+  itemName    String?   
+  applied     Boolean?  @default(false)                 
+  metadata    Json?                       
+  updatedAt   DateTime          @updatedAt
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([payload]) 
 }
 
 model ChatMessage {
@@ -58,29 +65,40 @@ model ChatMessage {
   @@index([createdAt])
 }
 
-model Purchase {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemSku     String
-  itemName    String
-  price       Float
-  currency    CurrencyType
-  status      TransactionStatus @default(PENDING)
-  createdAt   DateTime @default(now())
-  
+model PointHistory {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        BigInt    @default(0)  // ✅ Изменено на BigInt
+  type          PointType @default(PURCHASE)
+  description   String
+  transactionId String?   @unique
+  createdAt     DateTime  @default(now())
+
   @@index([userId])
-  @@index([status])
+  @@index([type])
   @@index([createdAt])
 }
 
 enum CurrencyType {
   TON
   STARS
+  POINTS
 }
 
 enum TransactionStatus {
   PENDING
   SUCCESS
   FAILED
+  REFUNDED
+  COMPLETED  
+}
+
+enum PointType {
+  PURCHASE
+  DAILY_BONUS
+  REFERRAL
+  SYSTEM
+  QUEST
+  BONUS 
 }

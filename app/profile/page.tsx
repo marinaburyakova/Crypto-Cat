@@ -2,6 +2,7 @@
 import { prisma } from '@/lib/prisma'
 import { redis, safeRedis } from '@/lib/redis'
 import { BottomNav } from '@/components/ui/bottom-nav'
+import { cookies, headers } from 'next/headers'  // ✅ Добавлено
 import {
   User,
   ShieldAlert,
@@ -9,12 +10,15 @@ import {
   Calendar,
   Zap,
   TrendingUp,
+  Crown,
+  Gem,
+  Clock,
 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// ✅ Определяем тип UserData под вашу схему
+// ✅ Обновленный интерфейс
 interface UserData {
   id: string
   points: number
@@ -24,71 +28,98 @@ interface UserData {
   exp: number
   unclaimedPoints: number
   passiveRate: number
+  skin: string
+  vipUntil: Date | null
+  totalSpent: number
   createdAt: Date
   updatedAt: Date
 }
 
-interface TelegramUser {
-  id: number
-  first_name?: string
-  last_name?: string
-  username?: string
-  language_code?: string
-}
-
-const getUserId = (): string => {
-  if (typeof window !== 'undefined') {
-    try {
-      const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe
-        ?.user as TelegramUser
-      if (tgUser?.id) {
-        return tgUser.id.toString()
-      }
-    } catch (error) {
-      console.warn('⚠️ Error getting Telegram user:', error)
+// ✅ Получение userId на сервере
+async function getUserIdFromRequest(): Promise<string> {
+  try {
+    // Способ 1: Из заголовков (устанавливается в middleware)
+    const headersList = await headers()
+    const userIdFromHeader = headersList.get('x-user-id')
+    if (userIdFromHeader) {
+      return userIdFromHeader
     }
+
+    // Способ 2: Из cookies
+    const cookieStore = await cookies()
+    const tgUserCookie = cookieStore.get('tg_user')
+    if (tgUserCookie) {
+      try {
+        const tgUser = JSON.parse(tgUserCookie.value)
+        if (tgUser?.id) {
+          return tgUser.id.toString()
+        }
+      } catch (e) {
+        console.warn('⚠️ Invalid tg_user cookie:', e)
+      }
+    }
+
+    // Способ 3: Из query параметров (для разработки)
+    // Недоступно в server component, используем только для отладки
+  } catch (error) {
+    console.warn('⚠️ Error getting user from request:', error)
   }
+
   return process.env.DEFAULT_USER_ID || 'guest_user_demo_1337'
 }
 
-// ✅ Маппер из PostgreSQL в UserData
+// ✅ Маппер из PostgreSQL в UserData (обновленный)
 const mapDbUserToUserData = (dbUser: any): UserData | null => {
   if (!dbUser) return null
 
   return {
     id: dbUser.id,
-    points: Number(dbUser.points) || 0,
-    energy: 1000, // В вашей схеме нет energy, ставим по умолчанию
-    maxEnergy: 1000, // В вашей схеме нет maxEnergy, ставим по умолчанию
+    points: typeof dbUser.points === 'bigint' 
+      ? Number(dbUser.points) 
+      : (dbUser.points || 0),
+    energy: typeof dbUser.energy === 'bigint'
+      ? Number(dbUser.energy)
+      : (dbUser.energy || 1000),
+    maxEnergy: typeof dbUser.maxEnergy === 'bigint'
+      ? Number(dbUser.maxEnergy)
+      : (dbUser.maxEnergy || 1000),
     level: dbUser.level || 1,
-    exp: 0, // В вашей схеме нет exp, ставим по умолчанию
-    unclaimedPoints: Number(dbUser.unclaimedPoints) || 0,
+    exp: dbUser.exp || 0,
+    unclaimedPoints: typeof dbUser.unclaimedPoints === 'bigint'
+      ? Number(dbUser.unclaimedPoints)
+      : (dbUser.unclaimedPoints || 0),
     passiveRate: dbUser.passiveRate || 0,
+    skin: dbUser.skin || 'default',
+    vipUntil: dbUser.vipUntil || null,
+    totalSpent: dbUser.totalSpent || 0,
     createdAt: dbUser.createdAt || new Date(),
     updatedAt: dbUser.updatedAt || new Date(),
   }
 }
 
-// ✅ Маппер из Redis в UserData
+// ✅ Маппер из Redis в UserData (обновленный)
 const mapRedisUserToUserData = (redisUser: any): UserData | null => {
   if (!redisUser || Object.keys(redisUser).length === 0) return null
 
   return {
     id: redisUser.id || '',
-    points: parseInt(redisUser.points || '0'),
-    energy: parseInt(redisUser.energy || '1000'),
-    maxEnergy: parseInt(redisUser.maxEnergy || '1000'),
-    level: parseInt(redisUser.level || '1'),
-    exp: parseInt(redisUser.exp || '0'),
-    unclaimedPoints: parseInt(redisUser.unclaimedPoints || '0'),
-    passiveRate: parseInt(redisUser.passiveRate || '0'),
+    points: parseInt(redisUser.points || '0', 10),
+    energy: parseInt(redisUser.energy || '1000', 10),
+    maxEnergy: parseInt(redisUser.maxEnergy || '1000', 10),
+    level: parseInt(redisUser.level || '1', 10),
+    exp: parseInt(redisUser.exp || '0', 10),
+    unclaimedPoints: parseInt(redisUser.unclaimedPoints || '0', 10),
+    passiveRate: parseFloat(redisUser.passiveRate || '0'), // ✅ Исправлено
+    skin: redisUser.skin || 'default',
+    vipUntil: redisUser.vipUntil ? new Date(redisUser.vipUntil) : null,
+    totalSpent: parseFloat(redisUser.totalSpent || '0'),
     createdAt: redisUser.createdAt ? new Date(redisUser.createdAt) : new Date(),
     updatedAt: redisUser.updatedAt ? new Date(redisUser.updatedAt) : new Date(),
   }
 }
 
 export default async function ProfilePage() {
-  const activeUserId = getUserId()
+  const activeUserId = await getUserIdFromRequest()  // ✅ Асинхронный вызов
 
   if (!prisma) {
     console.error('❌ Prisma client is not initialized')
@@ -137,6 +168,10 @@ export default async function ProfilePage() {
               level: 1,
               passiveRate: 0,
               nonce: 0,
+              energy: 1000,
+              maxEnergy: 1000,
+              exp: 0,
+              skin: 'default',
             },
           })
           userData = mapDbUserToUserData(newUser)
@@ -158,6 +193,9 @@ export default async function ProfilePage() {
         exp: 0,
         unclaimedPoints: 0,
         passiveRate: 0,
+        skin: 'default',
+        vipUntil: null,
+        totalSpent: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       }
@@ -175,6 +213,15 @@ export default async function ProfilePage() {
       (Date.now() - new Date(userData.createdAt).getTime()) /
         (1000 * 60 * 60 * 24),
     )
+    
+    // Проверка VIP статуса
+    const isVip = userData.vipUntil && new Date(userData.vipUntil) > new Date()
+    const vipDaysLeft = isVip 
+      ? Math.ceil((new Date(userData.vipUntil!).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : 0
+
+    // ✅ Проверяем, есть ли нераспределенные очки для отображения
+    const hasUnclaimedPoints = userData.unclaimedPoints > 0
 
     return (
       <div className="relative flex flex-col h-full w-full bg-slate-950 text-slate-50 overflow-hidden justify-between">
@@ -192,7 +239,6 @@ export default async function ProfilePage() {
           <p className="text-[11px] text-slate-400 mt-0.5">
             Ваши on-chain достижения и статистика
           </p>
-          {/* Индикатор статуса Redis */}
           <div className="flex items-center gap-2 mt-2">
             <span
               className={`w-1.5 h-1.5 rounded-full ${redisAvailable ? 'bg-green-500' : 'bg-red-500'}`}
@@ -202,12 +248,43 @@ export default async function ProfilePage() {
                 ? 'Redis online'
                 : 'Redis offline (используется PostgreSQL)'}
             </span>
+            {isVip && (
+              <span className="ml-auto text-[10px] text-yellow-400 flex items-center gap-1">
+                <Crown className="w-3 h-3" />
+                VIP {vipDaysLeft}д
+              </span>
+            )}
           </div>
         </header>
 
         {/* Блок статистики */}
         <div className="relative z-10 flex-1 p-4 space-y-4 overflow-y-auto scrollbar-none">
           <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 space-y-3.5 shadow-inner">
+            {/* Скин и статус VIP */}
+            <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
+              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                <Gem className="w-4 h-4 text-purple-400" /> Скин:
+              </span>
+              <span className="text-sm font-mono font-black text-purple-400">
+                {userData.skin === 'legendary' ? '⭐ Легендарный' : userData.skin || 'Обычный'}
+              </span>
+            </div>
+
+            {isVip && (
+              <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
+                <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <Crown className="w-4 h-4 text-yellow-400" /> VIP до:
+                </span>
+                <span className="text-sm font-mono font-black text-yellow-400">
+                  {new Date(userData.vipUntil!).toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
                 <Award className="w-4 h-4 text-yellow-500" /> Всего накликано:
@@ -228,28 +305,27 @@ export default async function ProfilePage() {
 
             <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-purple-400" /> RPG Уровень
-                кота:
+                <ShieldAlert className="w-4 h-4 text-purple-400" /> RPG Уровень:
               </span>
               <span className="text-sm font-mono font-black text-purple-400">
                 {userData.level} LVL
               </span>
             </div>
 
+            {/* Нераспределенные очки с уведомлением */}
             <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-emerald-400" /> Нераспределенные
-                очки:
+                <Award className="w-4 h-4 text-emerald-400" /> Нераспределенные:
               </span>
-              <span className="text-sm font-mono font-black text-emerald-400">
+              <span className={`text-sm font-mono font-black ${hasUnclaimedPoints ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`}>
                 {userData.unclaimedPoints.toLocaleString()}
+                {hasUnclaimedPoints && ' 🔔'}
               </span>
             </div>
 
             <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-cyan-400" /> Пассивный
-                доход:
+                <TrendingUp className="w-4 h-4 text-cyan-400" /> Пассивный доход:
               </span>
               <span className="text-sm font-mono font-black text-cyan-400">
                 {userData.passiveRate} ⚡/ч
@@ -273,9 +349,9 @@ export default async function ProfilePage() {
               />
             </div>
 
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center border-b border-slate-800/50 pb-2.5">
               <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-cyan-400" /> Дней в игре:
+                <Clock className="w-4 h-4 text-cyan-400" /> Дней в игре:
               </span>
               <span className="text-sm font-mono font-black text-cyan-400">
                 {daysInGame} дн.
@@ -314,6 +390,18 @@ export default async function ProfilePage() {
                 <p className="text-xs text-slate-400">Средний клик</p>
                 <p className="text-lg font-black text-cyan-400">10 ⚡</p>
               </div>
+            </div>
+          </div>
+
+          {/* Траты */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                <Gem className="w-4 h-4 text-amber-400" /> Всего потрачено:
+              </span>
+              <span className="text-sm font-mono font-black text-amber-400">
+                ${userData.totalSpent.toFixed(2)}
+              </span>
             </div>
           </div>
 
