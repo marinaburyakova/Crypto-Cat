@@ -1,4 +1,4 @@
-// components/game/GameUI.tsx
+
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
@@ -16,6 +16,7 @@ import { useGameLogic } from '@/hooks/useGameLogic'
 import { useTelegram } from '@/hooks/useTelegram'
 import { useNotification } from '@/components/ui/Notification'
 import { getCatModel, getCatInfo } from './GameConfig'
+import { BottomNav } from '@/components/ui/BottomNav'  // ✅ ДОБАВЛЕНО
 
 interface GameUIProps {
   userId: string
@@ -72,7 +73,6 @@ export function GameUI({ userId }: GameUIProps) {
   // ЭФФЕКТЫ
   // ============================================================
   
-  // ✅ Исправлено: useEffect вместо useState
   useEffect(() => {
     setUserStars(points)
   }, [points])
@@ -113,7 +113,10 @@ export function GameUI({ userId }: GameUIProps) {
   // ============================================================
   
   return (
-    <GameContainer notificationComponent={NotificationComponent}>
+    <div className="relative flex flex-col h-full w-full">
+      {/* Уведомления */}
+      {NotificationComponent}
+
       {/* Уведомления о достижениях */}
       <GameAchievementNotifier
         points={points}
@@ -135,7 +138,7 @@ export function GameUI({ userId }: GameUIProps) {
         points={points}
         scoreAnimation={scoreAnimation}
         catInfo={catInfo}
-        isLegendary={isLegendary}  // ✅ Добавлено в интерфейс
+        isLegendary={isLegendary}
       />
 
       {/* Статистика */}
@@ -183,6 +186,9 @@ export function GameUI({ userId }: GameUIProps) {
         onTonSuccess={handleTonSuccess}
         onTonError={handleTonError}
       />
-    </GameContainer>
+
+      {/* ✅ НИЖНЯЯ НАВИГАЦИЯ - ДОБАВЛЕНО */}
+      <BottomNav activeTab="game" />
+    </div>
   )
 }
