@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
   engineType = "library"
@@ -18,8 +17,12 @@ model User {
   energy          Int            @default(1000)
   maxEnergy       Int            @default(1000)
   exp             Int            @default(0)
+  vipUntil        DateTime?
+  skin            String?        @default("default")
+  totalSpent      Float          @default(0)
   transactions    Transaction[]
   chatMessages    ChatMessage[]
+  purchases       Purchase[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -52,6 +55,22 @@ model ChatMessage {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([createdAt])
+}
+
+model Purchase {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemSku     String
+  itemName    String
+  price       Float
+  currency    CurrencyType
+  status      TransactionStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([status])
   @@index([createdAt])
 }
 
