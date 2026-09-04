@@ -20,7 +20,22 @@ function StaticModel({ url, emotion }: { url: string; emotion: string }) {
   const { scene } = useGLTF(url)
   const modelRef = useRef<THREE.Group>(null)
 
-  // Математический расчет покачивания и прыжка статичной сетки кота
+  // ✅ Оптимизация: клонируем сцену
+  const clonedScene = useRef<THREE.Group | null>(null)
+  
+  if (!clonedScene.current) {
+    clonedScene.current = scene.clone()
+    // ✅ ИСПРАВЛЕНО: используем правильную проверку на Mesh
+    clonedScene.current.traverse((child: THREE.Object3D) => {
+      // ✅ Используем type или instanceof
+      if (child.type === 'Mesh' || child instanceof THREE.Mesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+  }
+
+  // Математический расчет покачивания и прыжка
   useFrame((state) => {
     if (!modelRef.current) return
 
@@ -34,7 +49,7 @@ function StaticModel({ url, emotion }: { url: string; emotion: string }) {
         THREE.MathUtils.lerp(modelRef.current.scale.x, 1.08, 0.2),
       )
     } else {
-      // Естественное плавное покачивание (эффект живого дыхания в покое)
+      // Естественное плавное покачивание
       modelRef.current.position.y =
         Math.sin(state.clock.getElapsedTime() * 2) * 0.02
       modelRef.current.scale.setScalar(
@@ -46,7 +61,7 @@ function StaticModel({ url, emotion }: { url: string; emotion: string }) {
   return (
     <primitive
       ref={modelRef}
-      object={scene}
+      object={clonedScene.current || scene}
     />
   )
 }
@@ -60,7 +75,7 @@ export function GameField({
 }: GameFieldProps) {
   const handleTouch = (e: React.MouseEvent<HTMLDivElement>) => {
     if (energy <= 0) return
-    onTap(e.clientX, e.clientY) // Отправляем координаты тапа для вылетающих цифр
+    onTap(e.clientX, e.clientY)
   }
 
   return (
@@ -72,13 +87,34 @@ export function GameField({
       <Canvas
         shadows
         camera={{ position: [0, 0, 5], fov: 45 }}
+        gl={{ 
+          antialias: true, 
+          preserveDrawingBuffer: true,
+          alpha: false,
+          powerPreference: "high-performance",
+        }}
+        dpr={[1, 2]}
       >
-        {/* 🔥 ИСПРАВЛЕНО: Убрали Stage, добавили Environment с preset */}
+        {/* Освещение */}
         <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
-        <directionalLight position={[-5, 5, 5]} intensity={0.5} />
+        <directionalLight 
+          position={[5, 5, 5]} 
+          intensity={1} 
+          castShadow 
+          shadow-mapSize={[1024, 1024]}
+        />
+        <directionalLight 
+          position={[-5, 5, 5]} 
+          intensity={0.5} 
+        />
         
-        {/* Встроенное окружение без HDR файла */}
+        {/* Дополнительный свет снизу */}
+        <pointLight 
+          position={[0, -3, 2]} 
+          intensity={0.3} 
+          color="#8b5cf6" 
+        />
+        
         <Environment preset="studio" background={false} />
         
         <Suspense fallback={null}>
@@ -88,16 +124,17 @@ export function GameField({
           />
         </Suspense>
 
-        {/* OrbitControls позволяет игроку крутить статичную 3D-модельку пальцем */}
+        {/* OrbitControls */}
         <OrbitControls
-          enableZoom={false} // Запрещаем приближение
-          enablePan={false} // Запрещаем сдвиг камеры в сторону
+          enableZoom={false}
+          enablePan={false}
           minPolarAngle={Math.PI / 2.4}
           maxPolarAngle={Math.PI / 2}
+          rotateSpeed={0.5}
         />
       </Canvas>
 
-      {/* Эффект неоновой ауры за котом */}
+      {/* Эффект неоновой ауры */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center -z-10">
         <div
           className={`w-72 h-72 rounded-full blur-3xl opacity-20 transition-colors duration-500 ${
@@ -112,10 +149,18 @@ export function GameField({
           ⚡ СУПЕРСИЛА АКТИВНА
         </div>
       )}
+
+      {/* Индикатор энергии */}
+      {energy <= 0 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none bg-red-500/20 border border-red-500/30 text-red-400 px-4 py-2 rounded-xl text-xs font-bold animate-pulse">
+          ⚡ Нет энергии! Купи энергию в магазине
+        </div>
+      )}
     </div>
   )
 }
 
-// Заранее кэшируем .glb файлы в память, чтобы переключение на 50 тапах происходило моментально
+// ✅ Заранее кэшируем .glb файлы
 useGLTF.preload('/assets/models/cat.glb')
 useGLTF.preload('/assets/models/cat_superhero.glb')
+useGLTF.preload('/assets/models/cat_legendary.glb')

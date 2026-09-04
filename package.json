@@ -14,7 +14,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.10.0",
-    "@react-three/drei": "^10.0.0",
+    "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.0.0",
     "@telegram-apps/sdk-react": "^3.3.9",
     "@ton/core": "^0.63.1",
@@ -32,6 +32,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-error-boundary": "^6.1.4",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
     "three": "^0.172.0"
