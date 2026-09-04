@@ -5,14 +5,9 @@ import { useGLTF } from '@react-three/drei';
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group } from 'three';
-import { DRACOLoader } from 'three-stdlib'; // ✅ Добавлено
+import { DRACOLoader } from 'three-stdlib'; 
+import { CatDisplayProps } from '@/types/game'
 
-interface CatDisplayProps {
-  url: string;
-  scale?: number;
-  rotationSpeed?: number;
-  isLegendary?: boolean;
-}
 
 // ✅ Настройка DRACO загрузчика
 const dracoLoader = new DRACOLoader();

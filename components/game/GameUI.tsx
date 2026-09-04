@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { GameContainer } from './GameContainer'
 import { GameLoader } from './GameLoader'
 import { GameHeader } from './GameHeader'
 import { GameStats } from './GameStats'
@@ -22,6 +23,10 @@ interface GameUIProps {
 }
 
 export function GameUI({ userId }: GameUIProps) {
+  // ============================================================
+  // ✅ ВСЕ ХУКИ ДОЛЖНЫ БЫТЬ ВЫЗВАНЫ ДО ЛЮБЫХ УСЛОВИЙ ИЛИ RETURN
+  // ============================================================
+  
   const { hapticFeedback, notificationFeedback } = useTelegram()
   const { showNotification, NotificationComponent } = useNotification()
 
@@ -46,23 +51,24 @@ export function GameUI({ userId }: GameUIProps) {
     onNotificationFeedback: notificationFeedback,
   })
 
+  // ✅ Все useState ДО любых условий
   const [showEnergyModal, setShowEnergyModal] = useState(false)
   const [isBuyingEnergy, setIsBuyingEnergy] = useState(false)
   const [isTonModalOpen, setIsTonModalOpen] = useState(false)
   const [scoreAnimation, setScoreAnimation] = useState(false)
   const [userStars, setUserStars] = useState(0)
 
+  // ✅ Все useMemo ДО любых условий
   const catInfo = useMemo(() => getCatInfo(points), [points])
   const isSuperhero = points >= 50
   const isLegendary = points >= 1000
 
+  // ✅ Все useEffect ДО любых условий
   useEffect(() => {
     setUserStars(points)
   }, [points])
 
-  // ============================================================
-  // ✅ ПОКУПКА ЭНЕРГИИ ЗА STARS
-  // ============================================================
+  // ✅ Все useCallback ДО любых условий
   const handleBuyEnergyStars = useCallback(async (amount: number) => {
     setIsBuyingEnergy(true)
     try {
@@ -92,9 +98,6 @@ export function GameUI({ userId }: GameUIProps) {
     }
   }, [userId, setEnergy, setPoints, showNotification])
 
-  // ============================================================
-  // ✅ ПОКУПКА ЭНЕРГИИ ЗА TON
-  // ============================================================
   const handleBuyEnergyTon = useCallback(async (amount: number) => {
     setIsBuyingEnergy(true)
     try {
@@ -117,7 +120,6 @@ export function GameUI({ userId }: GameUIProps) {
       showNotification('info', '⏳ Ожидайте подтверждение оплаты TON...')
       setShowEnergyModal(false)
 
-      // Проверяем статус через 10 секунд
       setTimeout(async () => {
         const statusResponse = await fetch(
           `/api/payments/check-status?payload=${data.memo}&userId=${userId}`
@@ -136,9 +138,6 @@ export function GameUI({ userId }: GameUIProps) {
     }
   }, [userId, showNotification, fetchUserData])
 
-  // ============================================================
-  // ✅ БУСТ ЗА TON
-  // ============================================================
   const handleBuyBoost = useCallback(() => {
     setIsTonModalOpen(true)
   }, [])
@@ -154,7 +153,7 @@ export function GameUI({ userId }: GameUIProps) {
   }, [showNotification])
 
   // ============================================================
-  // ОТРИСОВКА
+  // ✅ ТОЛЬКО ПОСЛЕ ВСЕХ ХУКОВ МОЖНО ДЕЛАТЬ УСЛОВНЫЙ РЕНДЕРИНГ
   // ============================================================
   
   if (isLoading) {

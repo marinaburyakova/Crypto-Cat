@@ -2,16 +2,8 @@
 'use client'
 
 import { StarsPaymentButton } from '../game/StarsPaymentButton'
-import { ShopItem } from '@/types/shop'
-interface ShopItemCardProps {
-  item: ShopItem
-  userId: string
-  onBuyTon: (item: ShopItem) => void
-  onSuccess: () => void
-  onError: (error: string) => void
-  isRefreshing: boolean
-  canAfford: boolean
-}
+import { ShopItemCardProps } from '@/types/shop'
+
 
 export function ShopItemCard({
   item,

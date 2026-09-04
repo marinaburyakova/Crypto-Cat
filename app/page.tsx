@@ -1,24 +1,19 @@
-
+// app/page.tsx
 'use client'
 
-import { useEffect } from 'react'
+import Script from "next/script";
+import { GameUI } from '@/components/game/GameUI'
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    // Проверяем, что мы в Telegram
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready()
-      window.Telegram.WebApp.expand()
-    }
-  }, [])
+export default function HomePage() {
+  const userId = 'guest_user_demo_1337'
 
   return (
-    <html>
-      <head>
-        {/* Telegram WebApp SDK */}
-        <script src="https://telegram.org/js/telegram-web-app.js" />
-      </head>
-      <body>{children}</body>
-    </html>
+    <>
+      <Script
+        src="https://telegram.org/js/telegram-web-app.js"
+        strategy="beforeInteractive"
+      />
+      <GameUI userId={userId} />
+    </>
   )
 }

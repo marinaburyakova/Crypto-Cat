@@ -1,7 +1,14 @@
 // components/game/GameLoader.tsx
 'use client'
+import { useEffect, useState } from 'react'
 
 export function GameLoader() {
+   const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
   return (
     <div className="flex items-center justify-center h-full w-full bg-slate-950">
       <div className="text-center">

@@ -2,6 +2,7 @@
 'use client'
 
 import { Trophy } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 interface GameHeaderProps {
   level: number
@@ -18,6 +19,11 @@ interface GameHeaderProps {
 }
 
 export function GameHeader({ level, points, scoreAnimation, catInfo }: GameHeaderProps) {
+   const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
   return (
     <header className="relative z-10 bg-slate-900/60 backdrop-blur-xl border-b border-slate-800/80 p-4 space-y-3">
       <div className="flex justify-between items-center">

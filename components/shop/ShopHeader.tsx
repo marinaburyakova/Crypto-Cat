@@ -2,18 +2,8 @@
 'use client';
 
 import { Sparkles, Crown, Zap, Loader2 } from 'lucide-react';
+import { ShopHeaderProps } from '@/types/shop'
 
-interface ShopHeaderProps {
-  userData: {
-    points: number;
-    level: number;
-    energy: number;
-    maxEnergy: number;
-    vipUntil: string | null;
-  } | null;
-  isRefreshing: boolean;
-  onRefresh: () => void;
-}
 
 export function ShopHeader({ userData, isRefreshing, onRefresh }: ShopHeaderProps) {
   const isVip = userData?.vipUntil && new Date(userData.vipUntil) > new Date();
