@@ -1,11 +1,37 @@
 /* app/globals.css */
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Inter", "Geist Sans", sans-serif;
+  --font-sans: 'Inter', 'Geist Sans', sans-serif;
 }
 
 /* Анимации */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) skewX(-45deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-45deg);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
 @keyframes clickPop {
   0% {
     transform: translateY(0) scale(0.8) rotate(0deg);
@@ -26,11 +52,12 @@
 }
 
 /* Глобальные стили */
-html, body {
+html,
+body {
   background-color: #09090b;
   color: #fafafa;
   overflow-x: hidden;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 @utility text-stroke {

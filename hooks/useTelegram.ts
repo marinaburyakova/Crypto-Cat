@@ -3,6 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+export type NotificationType = 'error' | 'success' | 'warning' | 'info' | 'achievement';
+export type HapticStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
+
 export interface TelegramUser {
   id: number;
   first_name?: string;
@@ -12,19 +15,16 @@ export interface TelegramUser {
   photo_url?: string;
 }
 
-// Типы для Haptic Feedback
-export type HapticStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
-export type NotificationType = 'error' | 'success' | 'warning';
-
 interface UseTelegramReturn {
   user: TelegramUser | null;
   isInTelegram: boolean;
   isReady: boolean;
   showAlert: (message: string, callback?: () => void) => void;
-  showConfirm: (message: string) => Promise<boolean>; // ✅ Исправлен тип
+  showConfirm: (message: string) => Promise<boolean>;
   hapticFeedback: (style?: HapticStyle) => void;
   notificationFeedback: (type?: NotificationType) => void;
   openLink: (url: string) => void;
+  closeWebApp: () => void;
   webApp: any;
 }
 
@@ -35,33 +35,48 @@ export function useTelegram(): UseTelegramReturn {
 
   useEffect(() => {
     const checkTelegram = () => {
-      if (typeof window === 'undefined') return;
-
-      const webApp = window.Telegram?.WebApp;
-      const isTelegram = !!(webApp?.initData || 
-                          window.location.search.includes('tgWebAppData'));
-
-      setIsInTelegram(isTelegram);
-
-      if (isTelegram && webApp) {
-        webApp.ready();
-        webApp.expand();
-
-        const userData = webApp.initDataUnsafe?.user;
-        if (userData) {
-          setUser(userData);
+      // ✅ Всегда устанавливаем isReady в true, даже если ошибка
+      try {
+        if (typeof window === 'undefined') {
+          console.log('🔧 Not in browser');
+          setIsReady(true);
+          return;
         }
 
+        const webApp = window.Telegram?.WebApp;
+        const isTelegram = !!(webApp?.initData || 
+                            window.location.search.includes('tgWebAppData'));
+
+        console.log('📱 Telegram check:', { isTelegram, hasWebApp: !!webApp });
+
+        setIsInTelegram(isTelegram);
+
+        if (isTelegram && webApp) {
+          try {
+            webApp.ready();
+            webApp.expand();
+
+            const userData = webApp.initDataUnsafe?.user;
+            if (userData) {
+              setUser(userData);
+              console.log('👤 User data loaded:', userData);
+            }
+          } catch (webAppError) {
+            console.warn('⚠️ WebApp error:', webAppError);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Telegram initialization error:', error);
+      } finally {
+        // ✅ ВСЕГДА устанавливаем isReady в true
         setIsReady(true);
-      } else {
-        setIsReady(true);
+        console.log('✅ Telegram hook ready, isInTelegram:', isInTelegram);
       }
     };
 
     checkTelegram();
   }, []);
 
-  // ✅ Исправлен showAlert - теперь всегда безопасный
   const showAlert = useCallback((message: string, callback?: () => void) => {
     if (isInTelegram && window.Telegram?.WebApp) {
       window.Telegram.WebApp.showAlert(message, callback);
@@ -71,7 +86,6 @@ export function useTelegram(): UseTelegramReturn {
     }
   }, [isInTelegram]);
 
-  // ✅ ИСПРАВЛЕНО: showConfirm возвращает Promise<boolean>
   const showConfirm = useCallback((message: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (isInTelegram && window.Telegram?.WebApp) {
@@ -79,14 +93,12 @@ export function useTelegram(): UseTelegramReturn {
           resolve(confirmed);
         });
       } else {
-        // Fallback для браузера
         const confirmed = window.confirm(message);
         resolve(confirmed);
       }
     });
   }, [isInTelegram]);
 
-  // Haptic Feedback для тактильной отдачи
   const hapticFeedback = useCallback((style: HapticStyle = 'medium') => {
     if (isInTelegram && window.Telegram?.WebApp?.HapticFeedback) {
       try {
@@ -97,22 +109,27 @@ export function useTelegram(): UseTelegramReturn {
     }
   }, [isInTelegram]);
 
-  // Уведомление с вибрацией (для success/error/warning)
   const notificationFeedback = useCallback((type: NotificationType = 'success') => {
     if (isInTelegram && window.Telegram?.WebApp?.HapticFeedback) {
       try {
-        window.Telegram.WebApp.HapticFeedback.notificationOccurred(type);
+        let mappedType: 'error' | 'success' | 'warning' = 'success';
+        
+        if (type === 'error') mappedType = 'error';
+        else if (type === 'warning') mappedType = 'warning';
+        else if (type === 'success' || type === 'achievement' || type === 'info') {
+          mappedType = 'success';
+        }
+        
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred(mappedType);
       } catch (error) {
         console.warn('Notification feedback error:', error);
       }
     }
   }, [isInTelegram]);
 
-  // Открытие ссылки
   const openLink = useCallback((url: string) => {
     if (isInTelegram && window.Telegram?.WebApp) {
       try {
-        // Пробуем открыть через Telegram
         if (window.Telegram.WebApp.openLink) {
           window.Telegram.WebApp.openLink(url);
         } else if (window.Telegram.WebApp.openTelegramLink) {
@@ -129,7 +146,6 @@ export function useTelegram(): UseTelegramReturn {
     }
   }, [isInTelegram]);
 
-  // ✅ Дополнительный метод для закрытия WebApp
   const closeWebApp = useCallback(() => {
     if (isInTelegram && window.Telegram?.WebApp) {
       window.Telegram.WebApp.close();
@@ -145,11 +161,11 @@ export function useTelegram(): UseTelegramReturn {
     hapticFeedback,
     notificationFeedback,
     openLink,
+    closeWebApp,
     webApp: typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined,
   };
 }
 
-// ✅ Дополнительный хук для проверки Telegram без полной загрузки
 export function useTelegramSimple() {
   const [isInTelegram, setIsInTelegram] = useState(false);
 

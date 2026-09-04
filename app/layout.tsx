@@ -21,27 +21,35 @@ export default function RootLayout({
     const initTelegram = async () => {
       if (typeof window === 'undefined') return;
       
-      const isTelegram = !!(window.Telegram?.WebApp?.initData || 
-                          window.location.search.includes('tgWebAppData'));
-      
-      if (!isTelegram) {
-        console.log('📱 Not in Telegram environment - Demo mode');
-        setIsTelegramReady(true);
-        return;
-      }
-
       try {
-        const sdk = await import('@telegram-apps/sdk-react');
-        await sdk.init();
+        // Проверяем, есть ли Telegram WebApp
+        const isTelegram = !!(window.Telegram?.WebApp?.initData || 
+                            window.location.search.includes('tgWebAppData'));
         
-        if (window.Telegram?.WebApp) {
+        if (isTelegram && window.Telegram?.WebApp) {
+          console.log('📱 Telegram WebApp detected');
+          
+          // ✅ Инициализируем WebApp
           window.Telegram.WebApp.ready();
           window.Telegram.WebApp.expand();
+          
+          // ✅ Пробуем импортировать SDK только если он установлен
+          try {
+            const sdk = await import('@telegram-apps/sdk-react');
+            if (sdk && sdk.init) {
+              await sdk.init();
+              console.log('✅ Telegram SDK initialized');
+            }
+          } catch (sdkError) {
+            // SDK не установлен - это нормально для демо-режима
+            console.log('ℹ️ Telegram SDK not installed, using WebApp directly');
+          }
+        } else {
+          console.log('📱 Not in Telegram environment - Demo mode');
         }
-        
-        setIsTelegramReady(true);
       } catch (error) {
         console.error('❌ Telegram initialization error:', error);
+      } finally {
         setIsTelegramReady(true);
       }
     };
