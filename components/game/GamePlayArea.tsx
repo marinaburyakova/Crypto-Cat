@@ -10,7 +10,7 @@ interface GamePlayAreaProps {
   energy: number
   onTap: (x: number, y: number) => void
   catModel: string
-  catInfo: { 
+  catInfo: {
     name: string
     emoji: string
     text: string
@@ -19,7 +19,7 @@ interface GamePlayAreaProps {
     borderColor?: string
   }
   isSuperhero: boolean
-  isLegendary: boolean  // ✅ Добавлено
+  isLegendary: boolean
   comboCount: number
 }
 
@@ -42,13 +42,13 @@ export function GamePlayArea({
         catModel={catModel}
         catInfo={catInfo}
         isSuperhero={isSuperhero}
-        isLegendary={isLegendary}  // ✅ Передаем в GameField
+        isLegendary={isLegendary}
       />
 
       <GameCombo count={comboCount} />
-      <GameHeroBadge 
+      <GameHeroBadge
         isSuperhero={isSuperhero}
-        isLegendary={isLegendary}  // ✅ Передаем в GameHeroBadge
+        isLegendary={isLegendary}
         catInfo={catInfo}
       />
     </div>

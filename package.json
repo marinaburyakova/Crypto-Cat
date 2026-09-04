@@ -14,8 +14,6 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.10.0",
-    "@react-three/drei": "^10.7.8",
-    "@react-three/fiber": "^9.0.0",
     "@telegram-apps/sdk-react": "^3.3.9",
     "@ton/core": "^0.63.1",
     "@ton/ton": "^16.3.0",
