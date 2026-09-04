@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ✅ Находим транзакцию
+    // Находим транзакцию
     const transaction = await prisma.transaction.findUnique({
       where: { payload },
     })
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ✅ Если уже обработана
+    // Если уже обработана
     if (transaction.status === 'SUCCESS' || transaction.status === 'COMPLETED') {
       return NextResponse.json(
         { message: 'Already processed' },
@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
 
     const isSuccess = status === 'paid'
 
+    // Если платеж успешен
     if (isSuccess && transaction.metadata && transaction.sku) {
       const metadata = transaction.metadata as {
         effect: string
         effectValue: any
       }
       
-      // ✅ Применяем эффект
       await applyProductEffect({
         userId: transaction.userId,
         transactionId: transaction.id,
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ✅ Если платеж не удался
+    // Если платеж не удался
     await prisma.transaction.update({
       where: { id: transaction.id },
       data: {
