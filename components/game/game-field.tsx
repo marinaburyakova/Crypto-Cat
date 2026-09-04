@@ -1,37 +1,46 @@
 // components/game/game-field.tsx
-'use client';
+'use client'
 
-import { Suspense, useState, useCallback, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
-import { CatDisplay } from './CatDisplay';
-import { cn } from '@/lib/utils';
-import { Sparkles } from 'lucide-react';
+import { Suspense, useState, useCallback, useEffect } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls, Environment } from '@react-three/drei'
+import { CatDisplay } from './CatDisplay'
+import { cn } from '@/lib/utils'
+import { Sparkles } from 'lucide-react'
 
 interface GameFieldProps {
-  emotion: string;
-  energy: number;
-  onTap: (x: number, y: number) => void;
-  catModel: string;
-  catInfo: { name: string; emoji: string; text: string };
-  isSuperhero: boolean;
+  emotion: string
+  energy: number
+  onTap: (x: number, y: number) => void
+  catModel: string
+  catInfo: { name: string; emoji: string; text: string }
+  isSuperhero: boolean
+   isLegendary?: boolean 
 }
 
-// ✅ Встроенный компонент эффекта клика
-function ClickEffect({ x, y, onComplete }: { x: number; y: number; onComplete: () => void }) {
-  const [opacity, setOpacity] = useState(1);
-  const [scale, setScale] = useState(0.5);
+// Эффект клика
+function ClickEffect({
+  x,
+  y,
+  onComplete,
+}: {
+  x: number
+  y: number
+  onComplete: () => void
+}) {
+  const [opacity, setOpacity] = useState(1)
+  const [scale, setScale] = useState(0.5)
 
   useEffect(() => {
-    setScale(1);
+    setScale(1)
     const timer = setTimeout(() => {
-      setOpacity(0);
-      setScale(1.5);
-      setTimeout(onComplete, 300);
-    }, 500);
+      setOpacity(0)
+      setScale(1.5)
+      setTimeout(onComplete, 300)
+    }, 500)
 
-    return () => clearTimeout(timer);
-  }, [onComplete]);
+    return () => clearTimeout(timer)
+  }, [onComplete])
 
   return (
     <div
@@ -52,7 +61,7 @@ function ClickEffect({ x, y, onComplete }: { x: number; y: number; onComplete: (
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 export function GameField({
@@ -62,28 +71,33 @@ export function GameField({
   catModel,
   isSuperhero,
 }: GameFieldProps) {
-  const [effects, setEffects] = useState<{ id: number; x: number; y: number }[]>([]);
-  const [isPulsing, setIsPulsing] = useState(false);
+  const [effects, setEffects] = useState<
+    { id: number; x: number; y: number }[]
+  >([])
+  const [isPulsing, setIsPulsing] = useState(false)
 
-  const handleTap = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (energy <= 0) return;
+  const handleTap = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (energy <= 0) return
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
 
-    const id = Date.now();
-    setEffects(prev => [...prev, { id, x, y }]);
-    
-    setIsPulsing(true);
-    setTimeout(() => setIsPulsing(false), 300);
+      const id = Date.now()
+      setEffects((prev) => [...prev, { id, x, y }])
 
-    onTap(e.clientX, e.clientY);
-  }, [energy, onTap]);
+      setIsPulsing(true)
+      setTimeout(() => setIsPulsing(false), 300)
+
+      onTap(e.clientX, e.clientY)
+    },
+    [energy, onTap],
+  )
 
   const removeEffect = useCallback((id: number) => {
-    setEffects(prev => prev.filter(e => e.id !== id));
-  }, []);
+    setEffects((prev) => prev.filter((e) => e.id !== id))
+  }, [])
 
   return (
     <div
@@ -94,23 +108,63 @@ export function GameField({
       <div className="absolute inset-0">
         <Canvas
           camera={{ position: [0, 0, 5], fov: 45 }}
-          gl={{ 
-            antialias: true, 
+          gl={{
+            antialias: true,
             preserveDrawingBuffer: true,
             alpha: false,
-            powerPreference: "high-performance",
+            powerPreference: 'high-performance',
           }}
           dpr={[1, 1.5]}
         >
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 5, 5]} intensity={1} />
-          <directionalLight position={[-5, 5, 5]} intensity={0.5} />
-          <pointLight position={[0, -3, 2]} intensity={0.3} color="#8b5cf6" />
-          
-          <Environment preset="studio" background={false} />
-          
+          {/* ✅ Сбалансированное освещение - золотая середина */}
+
+          {/* Ambient - базовое освещение (среднее) */}
+          <ambientLight
+            intensity={0.4}
+            color="#404060"
+          />
+
+          {/* Основной направленный свет (умеренный) */}
+          <directionalLight
+            position={[4, 6, 4]}
+            intensity={0.6}
+            color="#fff5f0"
+            castShadow
+            shadow-mapSize={[512, 512]}
+          />
+
+          {/* Заполняющий свет (слабый) */}
+          <directionalLight
+            position={[-3, 2, 3]}
+            intensity={0.25}
+            color="#8888ff"
+          />
+
+          {/* Контровой свет (очень слабый) */}
+          <directionalLight
+            position={[0, 1, -4]}
+            intensity={0.15}
+            color="#ff8844"
+          />
+
+          {/* Нижний свет (минимальный) */}
+          <pointLight
+            position={[0, -3, 2]}
+            intensity={0.1}
+            color="#8b5cf6"
+          />
+
+          {/* ✅ Окружение - нейтральное */}
+          <Environment
+            preset="city" // Городское освещение - нейтральное
+            background={false}
+          />
+
           <Suspense fallback={null}>
-            <CatDisplay url={catModel} scale={1.2} />
+            <CatDisplay
+              url={catModel}
+              scale={1.2}
+            />
           </Suspense>
 
           <OrbitControls
@@ -124,19 +178,21 @@ export function GameField({
       </div>
 
       {/* Эффект пульсации */}
-      <div className={cn(
-        "absolute inset-0 pointer-events-none transition-all duration-300",
-        isPulsing && "bg-purple-500/5"
-      )} />
+      <div
+        className={cn(
+          'absolute inset-0 pointer-events-none transition-all duration-300',
+          isPulsing && 'bg-purple-500/5',
+        )}
+      />
 
       {/* Аура */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-        <div className={cn(
-          "w-64 h-64 rounded-full blur-3xl transition-all duration-1000",
-          isSuperhero 
-            ? "bg-amber-400/20 animate-pulse" 
-            : "bg-purple-500/30"
-        )} />
+        <div
+          className={cn(
+            'w-64 h-64 rounded-full blur-3xl transition-all duration-1000',
+            isSuperhero ? 'bg-amber-400/15 animate-pulse' : 'bg-purple-500/20',
+          )}
+        />
       </div>
 
       {/* Бейдж супергероя */}
@@ -163,5 +219,5 @@ export function GameField({
         />
       ))}
     </div>
-  );
+  )
 }

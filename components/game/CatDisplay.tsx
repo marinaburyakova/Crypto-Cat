@@ -16,7 +16,7 @@ export function CatDisplay({ url, scale = 1.2, rotationSpeed = 0.003 }: CatDispl
   const { scene } = useGLTF(url);
   const groupRef = useRef<Group>(null);
 
-  // Клонируем сцену один раз
+  // Клонируем сцену - без изменения материалов
   const clonedScene = useMemo(() => {
     const clone = scene.clone();
     clone.scale.set(scale, scale, scale);

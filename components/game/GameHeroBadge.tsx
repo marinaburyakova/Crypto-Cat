@@ -5,6 +5,7 @@ import { Crown } from 'lucide-react'
 
 interface GameHeroBadgeProps {
   isSuperhero: boolean
+  isLegendary?: boolean
   catInfo: {
     emoji: string
     name: string

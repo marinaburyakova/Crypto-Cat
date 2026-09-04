@@ -14,6 +14,7 @@ interface GameHeaderProps {
     emoji: string
     name: string
   }
+   isLegendary?: boolean 
 }
 
 export function GameHeader({ level, points, scoreAnimation, catInfo }: GameHeaderProps) {

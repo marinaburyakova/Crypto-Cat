@@ -1,57 +1,57 @@
 // components/game/StarsPaymentButton.tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 
 interface StarsPaymentButtonProps {
-  userId: string;
-  itemPriceStars: number;
-  itemSku: string;
-  itemName: string;
-  onSuccess?: () => void;
-  onError?: (error: string) => void; // ✅ Добавлен обработчик ошибок
-  className?: string;
-  disabled?: boolean; // ✅ Добавлен пропс disabled
-  children?: React.ReactNode; // ✅ Поддержка кастомного контента
+  userId: string
+  itemPriceStars: number
+  itemSku: string
+  itemName: string
+  onSuccess?: () => void
+  onError?: (error: string) => void // ✅ Добавлен обработчик ошибок
+  className?: string
+  disabled?: boolean // ✅ Добавлен пропс disabled
+  children?: React.ReactNode // ✅ Поддержка кастомного контента
 }
 
-export function StarsPaymentButton({ 
-  userId, 
-  itemPriceStars, 
-  itemSku, 
-  itemName, 
+export function StarsPaymentButton({
+  userId,
+  itemPriceStars,
+  itemSku,
+  itemName,
   onSuccess,
   onError,
   className = '',
   disabled = false,
-  children
+  children,
 }: StarsPaymentButtonProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handlePurchase = async () => {
     // Сброс ошибки
-    setError(null);
-    setIsLoading(true);
+    setError(null)
+    setIsLoading(true)
 
     try {
       // ✅ Валидация входных данных
       if (!userId) {
-        throw new Error('ID пользователя не указан');
+        throw new Error('ID пользователя не указан')
       }
 
       if (!itemSku) {
-        throw new Error('SKU товара не указан');
+        throw new Error('SKU товара не указан')
       }
 
       if (itemPriceStars <= 0) {
-        throw new Error('Некорректная цена товара');
+        throw new Error('Некорректная цена товара')
       }
 
       // ✅ Используем правильный API эндпоинт
       const response = await fetch('/api/payments/stars-invoice', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -60,116 +60,120 @@ export function StarsPaymentButton({
           itemSku,
           itemName,
         }),
-      });
+      })
 
-      const data = await response.json();
-      
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка создания платежа');
+        throw new Error(data.error || 'Ошибка создания платежа')
       }
 
       // ✅ Проверяем наличие ссылки на инвойс
       if (!data.invoiceLink) {
-        throw new Error('Ссылка на оплату не получена');
+        throw new Error('Ссылка на оплату не получена')
       }
 
       // ✅ Открываем инвойс в новом окне
-      const invoiceWindow = window.open(data.invoiceLink, '_blank');
-      
+      const invoiceWindow = window.open(data.invoiceLink, '_blank')
+
       if (!invoiceWindow) {
-        throw new Error('Не удалось открыть окно оплаты. Разрешите всплывающие окна.');
+        throw new Error(
+          'Не удалось открыть окно оплаты. Разрешите всплывающие окна.',
+        )
       }
 
       // ✅ Вызываем onSuccess при успешном создании инвойса
-      onSuccess?.();
+      onSuccess?.()
 
       // ✅ Начинаем проверку статуса платежа
-      startPaymentStatusCheck(data.payload, data.transactionId);
-
+      startPaymentStatusCheck(data.payload, data.transactionId)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Ошибка при покупке';
-      console.error('❌ Purchase error:', error);
-      setError(errorMessage);
-      
+      const errorMessage =
+        error instanceof Error ? error.message : 'Ошибка при покупке'
+      console.error('❌ Purchase error:', error)
+      setError(errorMessage)
+
       // ✅ Вызываем onError если передан
       if (onError) {
-        onError(errorMessage);
+        onError(errorMessage)
       } else {
         // ✅ Или показываем уведомление
-        alert(`❌ ${errorMessage}`);
+        alert(`❌ ${errorMessage}`)
       }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   // ✅ Функция проверки статуса платежа
   const startPaymentStatusCheck = (payload: string, transactionId?: string) => {
-    let attempts = 0;
-    const maxAttempts = 60; // Максимум 60 попыток (5 минут)
+    let attempts = 0
+    const maxAttempts = 60 // Максимум 60 попыток (5 минут)
     const intervalId = setInterval(async () => {
-      attempts++;
-      
+      attempts++
+
       try {
-        const response = await fetch(`/api/payments/check-status?memo=${payload}&userId=${userId}`);
-        const data = await response.json();
+        const response = await fetch(
+          `/api/payments/check-status?memo=${payload}&userId=${userId}`,
+        )
+        const data = await response.json()
 
         if (data.success && data.status === 'SUCCESS') {
-          clearInterval(intervalId);
-          console.log('✅ Payment confirmed!');
-          
+          clearInterval(intervalId)
+          console.log('✅ Payment confirmed!')
+
           // ✅ Показываем уведомление об успехе
-          onSuccess?.();
-          
+          onSuccess?.()
+
           // ✅ Можно добавить уведомление пользователю
-          alert('✅ Платеж успешно подтвержден!');
-          
+          alert('✅ Платеж успешно подтвержден!')
+
           // ✅ Обновляем страницу через 1 секунду
           setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+            window.location.reload()
+          }, 1000)
         }
 
         // Если статус FAILED или REFUNDED
         if (data.status === 'FAILED' || data.status === 'REFUNDED') {
-          clearInterval(intervalId);
-          console.warn('⚠️ Payment failed or refunded');
-          
-          const errorMessage = data.status === 'FAILED' 
-            ? 'Платеж не удался' 
-            : 'Платеж был возвращен';
-          
+          clearInterval(intervalId)
+          console.warn('⚠️ Payment failed or refunded')
+
+          const errorMessage =
+            data.status === 'FAILED'
+              ? 'Платеж не удался'
+              : 'Платеж был возвращен'
+
           if (onError) {
-            onError(errorMessage);
+            onError(errorMessage)
           }
         }
 
         // Если превышено количество попыток
         if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
-          console.warn('⚠️ Payment status check timeout');
-          
+          clearInterval(intervalId)
+          console.warn('⚠️ Payment status check timeout')
+
           if (onError) {
-            onError('Превышено время ожидания подтверждения платежа');
+            onError('Превышено время ожидания подтверждения платежа')
           }
         }
-
       } catch (error) {
-        console.error('❌ Status check error:', error);
-        
+        console.error('❌ Status check error:', error)
+
         // Если ошибка при проверке, продолжаем пытаться
         if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
+          clearInterval(intervalId)
           if (onError) {
-            onError('Ошибка проверки статуса платежа');
+            onError('Ошибка проверки статуса платежа')
           }
         }
       }
-    }, 5000); // Проверка каждые 5 секунд
+    }, 5000) // Проверка каждые 5 секунд
 
     // ✅ Возвращаем функцию для очистки интервала
-    return () => clearInterval(intervalId);
-  };
+    return () => clearInterval(intervalId)
+  }
 
   // ✅ Компонент состояния загрузки
   const LoadingContent = () => (
@@ -177,7 +181,7 @@ export function StarsPaymentButton({
       <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
       Обработка...
     </span>
-  );
+  )
 
   // ✅ Компонент ошибки
   const ErrorContent = () => (
@@ -185,7 +189,7 @@ export function StarsPaymentButton({
       <span className="text-sm">⚠️</span>
       Ошибка
     </span>
-  );
+  )
 
   return (
     <div className="w-full">
@@ -238,7 +242,7 @@ export function StarsPaymentButton({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 // ✅ Добавляем стили для анимации
@@ -250,7 +254,4 @@ const styles = `
   .animate-fadeIn {
     animation: fadeIn 0.3s ease-out;
   }
-`;
-
-// ✅ Если вы используете CSS-in-JS или styled-components, добавьте стили
-// Если нет, можно добавить в глобальный CSS или использовать Tailwind
+`
