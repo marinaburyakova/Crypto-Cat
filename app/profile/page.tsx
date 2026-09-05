@@ -1,7 +1,8 @@
+// app/profile/page.tsx
+'use client'
 
-
-import { ProfilePage } from '@/components/profile/ProfilePage';
+import { ProfilePage } from '@/components/profile/ProfilePage'
 
 export default function ProfilePageWrapper() {
-  return <ProfilePage />;
+  return <ProfilePage />
 }

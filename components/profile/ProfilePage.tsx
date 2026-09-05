@@ -1,90 +1,100 @@
 // components/profile/ProfilePage.tsx
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { BottomNav } from '@/components/ui/BottomNav';
-import { useNotification } from '@/components/ui/Notification';
-import { ProfileHeader } from './ProfileHeader';
-import { ProfileStats } from './ProfileStats';
-import { ProfileAchievement } from './ProfileAchievement';
-import { Loader2 } from 'lucide-react';
-
-interface UserData {
-  id: string;
-  points: number;
-  energy: number;
-  maxEnergy: number;
-  level: number;
-  exp: number;
-  passiveRate: number;
-  unclaimedPoints: number;
-  skin: string;
-  vipUntil: string | null;
-  totalSpent: number;
-  createdAt: string;
-}
+import { useState } from 'react'
+import { BottomNav } from '@/components/ui/BottomNav'
+import { useNotification } from '@/components/ui/Notification'
+import { ProfileHeader } from './ProfileHeader'
+import { ProfileStats } from './ProfileStats'
+import { ProfileAchievement } from './ProfileAchievement'
+import { AuthModal } from './AuthModal'
+import { useAuth } from '@/hooks/useAuth'
+import { Loader2, LogOut } from 'lucide-react'
 
 export function ProfilePage() {
-  const { showNotification, NotificationComponent } = useNotification();
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const userId = 'guest_user_demo_1337';
-
-  useEffect(() => {
-    fetch(`/api/clicks?userId=${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        setUserData({
-          id: userId,
-          points: data.points || 0,
-          energy: data.energy || 1000,
-          maxEnergy: data.maxEnergy || 1000,
-          level: data.level || 1,
-          exp: data.exp || 0,
-          passiveRate: data.passiveRate || 0,
-          unclaimedPoints: data.unclaimedPoints || 0,
-          skin: data.skin || 'default',
-          vipUntil: data.vipUntil || null,
-          totalSpent: data.totalSpent || 0,
-          createdAt: data.createdAt || new Date().toISOString(),
-        });
-        setIsLoading(false);
-      })
-      .catch(() => {
-        showNotification('error', '❌ Ошибка загрузки профиля');
-        setIsLoading(false);
-      });
-  }, [userId, showNotification]);
+  const { showNotification, NotificationComponent } = useNotification()
+  const { user, isAuthenticated, isLoading, error, login, register, logout, setGuest, isGuest } = useAuth()
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full w-full bg-slate-950">
         <Loader2 className="w-12 h-12 text-purple-500 animate-spin" />
       </div>
-    );
+    )
   }
 
-  if (!userData) {
+  // Если пользователь не авторизован и не гость → показываем модалку
+  if (!user && !isGuest) {
     return (
-      <div className="flex items-center justify-center h-full w-full bg-slate-950">
-        <p className="text-slate-400">Не удалось загрузить профиль</p>
+      <div className="h-full w-full bg-slate-950">
+        <AuthModal
+          isOpen={true}
+          onClose={() => {}}
+          onLogin={login}
+          onRegister={register}
+          onGuest={setGuest}
+          isLoading={isLoading}
+          error={error}
+        />
+        <BottomNav activeTab="profile" />
       </div>
-    );
+    )
   }
 
   return (
     <div className="relative flex flex-col h-full w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 overflow-hidden">
       {NotificationComponent}
 
-      <ProfileHeader userData={userData} />
+      {isGuest && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 text-center">
+          <p className="text-yellow-400 text-sm">
+            🟢 Вы играете как гость. При перезагрузке прогресс сбросится.
+          </p>
+        </div>
+      )}
+
+      <ProfileHeader userData={user!} isGuest={isGuest} />
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <ProfileStats userData={userData} />
-        <ProfileAchievement userData={userData} />
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+        <ProfileStats userData={user!} />
+        <ProfileAchievement userData={user!} />
+
+        {!isGuest && isAuthenticated && (
+          <button
+            onClick={() => {
+              logout()
+              showNotification('info', '👋 Вы вышли из аккаунта')
+            }}
+            className="w-full mt-4 flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-medium py-3 rounded-xl transition-all duration-200"
+          >
+            <LogOut className="w-4 h-4" />
+            Выйти из аккаунта
+          </button>
+        )}
+
+        {isGuest && (
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full mt-4 flex items-center justify-center gap-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 font-medium py-3 rounded-xl transition-all duration-200"
+          >
+            <LogOut className="w-4 h-4" />
+            Войти / Зарегистрироваться
+          </button>
+        )}
       </div>
 
       <BottomNav activeTab="profile" />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLogin={login}
+        onRegister={register}
+        onGuest={setGuest}
+        isLoading={isLoading}
+        error={error}
+      />
     </div>
-  );
+  )
 }

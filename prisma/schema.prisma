@@ -9,6 +9,8 @@ datasource db {
 
 model User {
   id              String         @id
+  login           String         @unique
+  password        String?
   points          BigInt         @default(0)
   unclaimedPoints BigInt         @default(0)
   level           Int            @default(1)
@@ -29,6 +31,7 @@ model User {
   @@index([id])
   @@index([level])
   @@index([createdAt])
+  @@index([login])
 }
 
 model Transaction {

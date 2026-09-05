@@ -6,18 +6,26 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
+    const login = searchParams.get('login')
 
-    if (!userId) {
+    // Ищем по userId или login
+    let whereClause = {}
+    if (userId) {
+      whereClause = { id: userId }
+    } else if (login) {
+      whereClause = { login }
+    } else {
       return NextResponse.json(
-        { success: false, error: 'Missing userId' },
+        { success: false, error: 'Missing userId or login' },
         { status: 400 }
       )
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: whereClause,
       select: {
         id: true,
+        login: true,
         points: true,
         energy: true,
         maxEnergy: true,
@@ -46,8 +54,6 @@ export async function GET(request: NextRequest) {
       // Преобразуем BigInt в number для клиента
       points: Number(user.points),
       unclaimedPoints: Number(user.unclaimedPoints),
-      energy: Number(user.energy),
-      maxEnergy: Number(user.maxEnergy),
     })
 
   } catch (error) {

@@ -2,7 +2,6 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { GameContainer } from './GameContainer'
 import { GameLoader } from './GameLoader'
 import { GameHeader } from './GameHeader'
 import { GameStats } from './GameStats'
@@ -11,7 +10,6 @@ import { GameBottomPanel } from './GameBottomPanel'
 import { GameModals } from './GameModals'
 import { GameAchievementNotifier } from './GameAchievementNotifier'
 import { GameScoreAnimation } from './GameScoreAnimation'
-import { useGameHandlers } from './hooks/useGameHandlers'
 import { useGameLogic } from '@/hooks/useGameLogic'
 import { useTelegram } from '@/hooks/useTelegram'
 import { useNotification } from '@/components/ui/Notification'
@@ -23,10 +21,7 @@ interface GameUIProps {
 }
 
 export function GameUI({ userId }: GameUIProps) {
-  // ============================================================
-  // ✅ ВСЕ ХУКИ ДОЛЖНЫ БЫТЬ ВЫЗВАНЫ ДО ЛЮБЫХ УСЛОВИЙ ИЛИ RETURN
-  // ============================================================
-  
+  // ✅ Хуки вызываются напрямую, без GameProviders
   const { hapticFeedback, notificationFeedback } = useTelegram()
   const { showNotification, NotificationComponent } = useNotification()
 
@@ -51,24 +46,21 @@ export function GameUI({ userId }: GameUIProps) {
     onNotificationFeedback: notificationFeedback,
   })
 
-  // ✅ Все useState ДО любых условий
+  // Остальной код без изменений...
   const [showEnergyModal, setShowEnergyModal] = useState(false)
   const [isBuyingEnergy, setIsBuyingEnergy] = useState(false)
   const [isTonModalOpen, setIsTonModalOpen] = useState(false)
   const [scoreAnimation, setScoreAnimation] = useState(false)
   const [userStars, setUserStars] = useState(0)
 
-  // ✅ Все useMemo ДО любых условий
   const catInfo = useMemo(() => getCatInfo(points), [points])
   const isSuperhero = points >= 50
   const isLegendary = points >= 1000
 
-  // ✅ Все useEffect ДО любых условий
   useEffect(() => {
     setUserStars(points)
   }, [points])
 
-  // ✅ Все useCallback ДО любых условий
   const handleBuyEnergyStars = useCallback(async (amount: number) => {
     setIsBuyingEnergy(true)
     try {
@@ -152,16 +144,12 @@ export function GameUI({ userId }: GameUIProps) {
     showNotification('error', `❌ ${error}`)
   }, [showNotification])
 
-  // ============================================================
-  // ✅ ТОЛЬКО ПОСЛЕ ВСЕХ ХУКОВ МОЖНО ДЕЛАТЬ УСЛОВНЫЙ РЕНДЕРИНГ
-  // ============================================================
-  
   if (isLoading) {
     return <GameLoader />
   }
 
   return (
-    <div className="relative flex flex-col h-full w-full">
+    <div className="relative flex flex-col h-screen w-full bg-zinc-950">
       {NotificationComponent}
 
       <GameAchievementNotifier
@@ -228,6 +216,9 @@ export function GameUI({ userId }: GameUIProps) {
       />
 
       <BottomNav activeTab="game" />
+
+     
+
     </div>
   )
 }

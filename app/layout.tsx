@@ -49,6 +49,7 @@ export default function RootLayout({
     <html
       lang="ru"
       className={`${inter.variable} antialiased`}
+      suppressHydrationWarning // ← Добавляем это для тега html
     >
       <head>
         <Script
@@ -56,7 +57,10 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className="bg-zinc-950 text-zinc-50 min-h-screen antialiased overflow-hidden">
+      <body
+        className="bg-zinc-950 text-zinc-50 min-h-screen antialiased overflow-hidden"
+        suppressHydrationWarning // ← Добавляем это для тега body
+      >
         <main className="relative flex flex-col h-screen max-w-md mx-auto bg-zinc-950 shadow-2xl border-x border-zinc-900 overflow-hidden w-full">
           {isReady ? (
             children

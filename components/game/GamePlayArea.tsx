@@ -34,7 +34,7 @@ export function GamePlayArea({
   comboCount,
 }: GamePlayAreaProps) {
   return (
-    <div className="flex-1 relative overflow-hidden">
+    <div className="flex-1 relative min-h-0 overflow-hidden">
       <GameField
         emotion={emotion}
         energy={energy}
