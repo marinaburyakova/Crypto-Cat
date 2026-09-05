@@ -14,30 +14,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 🔥 Если это гость — НЕ создаём в БД, возвращаем нулевые данные
-    if (userId === 'guest') {
-      return NextResponse.json({
-        success: true,
-        points: 0,
-        energy: 1000,
-        maxEnergy: 1000,
-        level: 1,
-        exp: 0,
-        unclaimedPoints: 0,
-        passiveRate: 0,
-        skin: 'default',
-        vipUntil: null,
-        totalSpent: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-    }
-
-    // 🔥 Только для авторизованных пользователей — работаем с БД
+    // Ищем пользователя в БД
     let user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
+        login: true,
         points: true,
         energy: true,
         maxEnergy: true,
@@ -53,12 +35,13 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Если пользователь не найден — создаём (только для авторизованных)
+    // Если пользователь не найден — создаём
     if (!user) {
       console.log(`👤 Creating new user: ${userId}`)
       user = await prisma.user.create({
         data: {
           id: userId,
+          login: userId,
           points: 0,
           energy: 1000,
           maxEnergy: 1000,
@@ -68,6 +51,7 @@ export async function GET(request: NextRequest) {
         },
         select: {
           id: true,
+          login: true,
           points: true,
           energy: true,
           maxEnergy: true,
@@ -111,17 +95,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 🔥 Если гость — не сохраняем в БД, просто возвращаем успех
-    if (userId === 'guest') {
-      return NextResponse.json({
-        success: true,
-        points: 0,
-        energy: 1000,
-        maxEnergy: 1000,
-      })
-    }
-
-    // Для авторизованных — обновляем в БД
+    // Обновляем пользователя: увеличиваем points, уменьшаем energy
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
@@ -132,6 +106,8 @@ export async function POST(request: NextRequest) {
         points: true,
         energy: true,
         maxEnergy: true,
+        level: true,
+        exp: true,
       }
     })
 
@@ -140,6 +116,8 @@ export async function POST(request: NextRequest) {
       points: Number(user.points),
       energy: user.energy,
       maxEnergy: user.maxEnergy,
+      level: user.level,
+      exp: user.exp,
     })
 
   } catch (error) {

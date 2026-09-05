@@ -1,104 +1,56 @@
 // app/api/payments/energy/buy-ton/route.ts
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import crypto from 'crypto'
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId, amount } = await req.json()
+    const { userId, amount } = await request.json()
 
-    if (!userId || !amount) {
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Missing userId or amount' },
+        { success: false, error: 'Missing userId' },
         { status: 400 }
       )
     }
 
-    const energyAmount = Number(amount)
-    if (isNaN(energyAmount) || energyAmount <= 0) {
-      return NextResponse.json(
-        { error: 'Invalid amount' },
-        { status: 400 }
-      )
-    }
-
-    // Цены в TON
-    const PRICES: Record<number, number> = {
-      100: 0.5,
-      500: 2.0,
-      1000: 3.5,
-      5000: 15.0,
-    }
-
-    const tonPrice = PRICES[energyAmount]
-    if (!tonPrice) {
-      return NextResponse.json(
-        { error: 'Invalid energy amount' },
-        { status: 400 }
-      )
-    }
-
-    const merchantAddress = process.env.MERCHANT_WALLET_ADDRESS
-    if (!merchantAddress) {
-      return NextResponse.json(
-        { error: 'Merchant address not configured' },
-        { status: 500 }
-      )
-    }
-
-    const memo = `ton_energy_${energyAmount}_${crypto.randomBytes(8).toString('hex')}_${Date.now()}`
-
-    // Создаем транзакцию
-    await prisma.$transaction(async (tx) => {
-      await tx.user.upsert({
-        where: { id: userId },
-        update: {},
-        create: {
-          id: userId,
-          points: 0,
-          unclaimedPoints: 0,
-          level: 1,
-          passiveRate: 0,
-          energy: 1000,
-          maxEnergy: 1000,
-        },
-      })
-
-      await tx.transaction.create({
-        data: {
-          userId,
-          amount: tonPrice,
-          currency: 'TON',
-          payload: memo,
-          sku: `ton_energy_${energyAmount}`,
-          itemName: `${energyAmount} энергии (TON)`,
-          status: 'PENDING',
-          metadata: {
-            energyAmount,
-            tonPrice,
-            memo,
-            merchantAddress,
-            type: 'energy_purchase',
-          },
-        },
-      })
+    // Найти или создать пользователя
+    const user = await prisma.user.upsert({
+      where: { id: userId },
+      update: {
+        points: { increment: amount },
+        energy: { increment: amount },
+      },
+      create: {
+        id: userId,
+        login: userId, // ← добавляем login
+        points: amount,
+        energy: 1000 + amount,
+        maxEnergy: 1000,
+        level: 1,
+        exp: 0,
+        unclaimedPoints: 0,
+        passiveRate: 0,
+        skin: 'default',
+      },
+      select: {
+        id: true,
+        points: true,
+        energy: true,
+        maxEnergy: true,
+      }
     })
-
-    const nanoAmount = BigInt(Math.round(tonPrice * 1_000_000_000)).toString()
-    const tonUri = `ton://transfer/${merchantAddress}?amount=${nanoAmount}&text=${encodeURIComponent(memo)}`
 
     return NextResponse.json({
       success: true,
-      tonUri,
-      memo,
-      energyAmount,
-      tonPrice,
+      points: Number(user.points),
+      energy: user.energy,
+      maxEnergy: user.maxEnergy,
     })
 
   } catch (error) {
-    console.error('❌ Buy energy with TON error:', error)
+    console.error('❌ Buy TON energy error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }

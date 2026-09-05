@@ -14,6 +14,7 @@ export interface AuthUser {
   passiveRate: number
   unclaimedPoints: number
   skin: string
+  vipUntil: string | null
   totalSpent: number
   createdAt: string
 }
@@ -26,50 +27,39 @@ interface UseAuthReturn {
   login: (login: string, password: string) => Promise<void>
   register: (login: string, password: string) => Promise<void>
   logout: () => void
-  setGuest: () => void
-  isGuest: boolean
   userId: string
 }
-
-// 🎯 Создание гостевых данных
-const createGuestUser = (): AuthUser => ({
-  id: 'guest',
-  login: 'Гость',
-  points: 0,
-  energy: 1000,
-  maxEnergy: 1000,
-  level: 1,
-  exp: 0,
-  passiveRate: 0,
-  unclaimedPoints: 0,
-  skin: 'default',
-  totalSpent: 0,
-  createdAt: new Date().toISOString(),
-})
 
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isGuest, setIsGuest] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Загрузка при монтировании
+  // 🔥 Загрузка при монтировании
   useEffect(() => {
+    if (isInitialized) return
+
     const loadAuth = async () => {
       setIsLoading(true)
-      
-      // Проверяем авторизацию
+
       const savedAuth = localStorage.getItem('catAuth')
+      console.log('📦 savedAuth:', savedAuth)
+
       if (savedAuth) {
         try {
-          const { login } = JSON.parse(savedAuth)
-          if (login) {
-            const response = await fetch(`/api/user/profile?userId=${login}`)
+          const { id, login } = JSON.parse(savedAuth)
+
+          if (id) {
+            const response = await fetch(`/api/user/profile?userId=${id}`)
+
             if (response.ok) {
               const data = await response.json()
+              console.log('✅ Загружены данные пользователя:', data.login)
+
               setUser({
                 id: data.id,
-                login: data.login,
+                login: data.login || login,
                 points: Number(data.points || 0),
                 energy: data.energy || 1000,
                 maxEnergy: data.maxEnergy || 1000,
@@ -78,35 +68,33 @@ export function useAuth(): UseAuthReturn {
                 passiveRate: data.passiveRate || 0,
                 unclaimedPoints: Number(data.unclaimedPoints || 0),
                 skin: data.skin || 'default',
+                vipUntil: data.vipUntil || null,
                 totalSpent: data.totalSpent || 0,
                 createdAt: data.createdAt || new Date().toISOString(),
               })
-              setIsGuest(false)
+              setIsInitialized(true)
               setIsLoading(false)
               return
+            } else {
+              console.warn('⚠️ Пользователь не найден в БД, удаляем catAuth')
+              localStorage.removeItem('catAuth')
             }
           }
         } catch (e) {
-          console.error('Ошибка загрузки auth:', e)
+          console.error('❌ Ошибка загрузки auth:', e)
+          localStorage.removeItem('catAuth')
         }
       }
 
-      // Проверяем, гость ли пользователь
-      const guestFlag = localStorage.getItem('catGuest')
-      if (guestFlag === 'true') {
-        setIsGuest(true)
-        setUser(createGuestUser())
-      } else {
-        setUser(null)
-        setIsGuest(false)
-      }
-      
+      setUser(null)
+      setIsInitialized(true)
       setIsLoading(false)
     }
 
     loadAuth()
-  }, [])
+  }, [isInitialized])
 
+  // 🔐 Вход
   const login = useCallback(async (login: string, password: string) => {
     setIsLoading(true)
     setError(null)
@@ -124,9 +112,11 @@ export function useAuth(): UseAuthReturn {
         throw new Error(data.error || 'Ошибка входа')
       }
 
-      localStorage.setItem('catAuth', JSON.stringify({ login }))
-      localStorage.removeItem('catGuest')
-      
+      localStorage.setItem('catAuth', JSON.stringify({
+        id: data.user.id,
+        login: data.user.login
+      }))
+
       setUser({
         id: data.user.id,
         login: data.user.login,
@@ -138,19 +128,25 @@ export function useAuth(): UseAuthReturn {
         passiveRate: data.user.passiveRate || 0,
         unclaimedPoints: Number(data.user.unclaimedPoints || 0),
         skin: data.user.skin || 'default',
+        vipUntil: data.user.vipUntil || null,
         totalSpent: data.user.totalSpent || 0,
         createdAt: data.user.createdAt || new Date().toISOString(),
       })
-      setIsGuest(false)
+      setIsInitialized(true)
+      setIsLoading(false)
+
+      console.log('✅ Вход выполнен, сохранён ID:', data.user.id)
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка входа'
+      console.error('❌ Ошибка входа:', message)
       setError(message)
-      throw err
-    } finally {
       setIsLoading(false)
+      throw err
     }
   }, [])
 
+  // 📝 Регистрация
   const register = useCallback(async (login: string, password: string) => {
     setIsLoading(true)
     setError(null)
@@ -168,9 +164,11 @@ export function useAuth(): UseAuthReturn {
         throw new Error(data.error || 'Ошибка регистрации')
       }
 
-      localStorage.setItem('catAuth', JSON.stringify({ login }))
-      localStorage.removeItem('catGuest')
-      
+      localStorage.setItem('catAuth', JSON.stringify({
+        id: data.user.id,
+        login: data.user.login
+      }))
+
       setUser({
         id: data.user.id,
         login: data.user.login,
@@ -182,46 +180,40 @@ export function useAuth(): UseAuthReturn {
         passiveRate: data.user.passiveRate || 0,
         unclaimedPoints: Number(data.user.unclaimedPoints || 0),
         skin: data.user.skin || 'default',
+        vipUntil: data.user.vipUntil || null,
         totalSpent: data.user.totalSpent || 0,
         createdAt: data.user.createdAt || new Date().toISOString(),
       })
-      setIsGuest(false)
+      setIsInitialized(true)
+      setIsLoading(false)
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка регистрации'
+      console.error('❌ Ошибка регистрации:', message)
       setError(message)
-      throw err
-    } finally {
       setIsLoading(false)
+      throw err
     }
   }, [])
 
+  // 🚪 Выход
   const logout = useCallback(() => {
     localStorage.removeItem('catAuth')
-    localStorage.removeItem('catGuest')
     setUser(null)
-    setIsGuest(false)
+    setIsInitialized(false)
+    setIsLoading(false)
   }, [])
 
-  const setGuest = useCallback(() => {
-    localStorage.setItem('catGuest', 'true')
-    localStorage.removeItem('catAuth')
-    setIsGuest(true)
-    setUser(createGuestUser())
-  }, [])
-
-  // 🔥 userId для передачи в GameUI
-  const userId = user?.id || 'guest'
+  const userId = user?.id || ''
 
   return {
     user,
-    isAuthenticated: !!user && !isGuest,
+    isAuthenticated: !!user,
     isLoading,
     error,
     login,
     register,
     logout,
-    setGuest,
-    isGuest,
-    userId, // ← добавляем
+    userId,
   }
 }

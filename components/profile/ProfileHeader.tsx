@@ -1,18 +1,31 @@
 // components/profile/ProfileHeader.tsx
 'use client';
 
-import { UserData } from './ProfilePage';
+interface UserData {
+  id: string;
+  login?: string;
+  points: number;
+  energy: number;
+  maxEnergy: number;
+  level: number;
+  exp: number;
+  passiveRate: number;
+  unclaimedPoints: number;
+  skin: string;
+  vipUntil: string | null;
+  totalSpent: number;
+  createdAt: string;
+}
 
 interface ProfileHeaderProps {
   userData: UserData;
-  isGuest: boolean;  // ← Добавляем пропс
+  isGuest: boolean;
 }
 
 export function ProfileHeader({ userData, isGuest }: ProfileHeaderProps) {
   return (
     <div className="relative px-6 pt-8 pb-6 bg-gradient-to-br from-purple-900/20 via-slate-900 to-slate-900 border-b border-zinc-800">
       <div className="flex items-center gap-4">
-        {/* Аватар */}
         <div className="relative">
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-4xl shadow-lg shadow-purple-500/20">
             🐱
@@ -24,7 +37,6 @@ export function ProfileHeader({ userData, isGuest }: ProfileHeaderProps) {
           )}
         </div>
 
-        {/* Информация */}
         <div>
           <h1 className="text-xl font-bold text-white">
             {userData.login || 'Игрок'}
@@ -42,7 +54,6 @@ export function ProfileHeader({ userData, isGuest }: ProfileHeaderProps) {
         </div>
       </div>
 
-      {/* Статистика в шапке */}
       <div className="grid grid-cols-3 gap-3 mt-6 pt-4 border-t border-zinc-800/50">
         <div className="text-center">
           <p className="text-lg font-bold text-yellow-400">{userData.points}</p>

@@ -10,40 +10,41 @@ export async function GET(request: NextRequest) {
     if (!login) {
       return NextResponse.json(
         { success: false, error: 'Missing login' },
-        { status: 400 },
+        { status: 400 }
       )
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { login: login },
-          { id: login }, // если логин — это ID
-        ],
-      },
+    // Временно ищем по id
+    const user = await prisma.user.findUnique({
+      where: { id: login },
       select: {
         id: true,
-        login: true,
-      },
+        points: true,
+        energy: true,
+        maxEnergy: true,
+        level: true,
+        exp: true,
+      }
     })
 
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
-        { status: 404 },
+        { status: 404 }
       )
     }
 
     return NextResponse.json({
       success: true,
       id: user.id,
-      login: user.login,
+      login: user.id,
     })
+
   } catch (error) {
     console.error('❌ User by login API error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

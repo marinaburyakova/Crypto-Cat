@@ -15,15 +15,18 @@ import { useTelegram } from '@/hooks/useTelegram'
 import { useNotification } from '@/components/ui/Notification'
 import { getCatModel, getCatInfo } from './GameConfig'
 import { BottomNav } from '@/components/ui/BottomNav'
+import { useRouter } from 'next/navigation'
 
 interface GameUIProps {
   userId: string
 }
 
 export function GameUI({ userId }: GameUIProps) {
-  // ✅ Хуки вызываются напрямую, без GameProviders
+  const router = useRouter()
   const { hapticFeedback, notificationFeedback } = useTelegram()
   const { showNotification, NotificationComponent } = useNotification()
+
+  const isDemo = userId === 'demo'
 
   const {
     points,
@@ -46,7 +49,7 @@ export function GameUI({ userId }: GameUIProps) {
     onNotificationFeedback: notificationFeedback,
   })
 
-  // Остальной код без изменений...
+  // Остальные состояния
   const [showEnergyModal, setShowEnergyModal] = useState(false)
   const [isBuyingEnergy, setIsBuyingEnergy] = useState(false)
   const [isTonModalOpen, setIsTonModalOpen] = useState(false)
@@ -152,6 +155,22 @@ export function GameUI({ userId }: GameUIProps) {
     <div className="relative flex flex-col h-screen w-full bg-zinc-950">
       {NotificationComponent}
 
+      {/* 🔥 Демо-баннер (только для неавторизованных) */}
+      {isDemo && (
+        <div className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-600/90 to-pink-600/90 backdrop-blur-sm px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-white text-sm font-medium">🎮 Демо-режим</span>
+            <span className="text-white/60 text-xs">Прогресс не сохраняется</span>
+          </div>
+          <button
+            onClick={() => router.push('/login')}
+            className="bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            🔐 Сохранить прогресс
+          </button>
+        </div>
+      )}
+
       <GameAchievementNotifier
         points={points}
         isLegendary={isLegendary}
@@ -216,9 +235,6 @@ export function GameUI({ userId }: GameUIProps) {
       />
 
       <BottomNav activeTab="game" />
-
-     
-
     </div>
   )
 }

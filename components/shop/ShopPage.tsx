@@ -1,7 +1,7 @@
 // components/shop/ShopPage.tsx
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { ShopHeader } from './ShopHeader';
 import { ShopItemCard } from './ShopItemCard';
@@ -19,8 +19,7 @@ import {
   Rocket 
 } from 'lucide-react';
 
-
-// ✅ Импортируем товары из отдельного файла или определяем здесь
+// Товары
 const SHOP_ITEMS: ShopItem[] = [
   {
     id: 'energy_boost',
@@ -137,46 +136,108 @@ export function ShopPage() {
   const [error, setError] = useState<string | null>(null);
   const [isTonModalOpen, setIsTonModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
+  
+  // Используем useRef для предотвращения множественных запросов
+  const isMountedRef = useRef(true);
+  const isFetchingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
+  // TODO: Получать userId из контекста авторизации или из сессии
   const userId = 'guest_user_demo_1337';
 
   const fetchUserData = useCallback(async () => {
+    // Предотвращаем множественные запросы
+    if (isFetchingRef.current) return;
+    if (!isMountedRef.current) return;
+
+    isFetchingRef.current = true;
+    
     try {
       setIsRefreshing(true);
       setError(null);
       
-      const res = await fetch(`/api/clicks?userId=${userId}`);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const res = await fetch(`/api/clicks?userId=${userId}`, {
+        signal: controller.signal,
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       
       const data = await res.json();
       
-      setUserData({
-        id: userId,
-        points: data.points || 0,
-        energy: data.energy || 1000,
-        maxEnergy: data.maxEnergy || 1000,
-        level: data.level || 1,
-        exp: data.exp || 0,
-        passiveRate: data.passiveRate || 0,
-        unclaimedPoints: data.unclaimedPoints || 0,
-        skin: data.skin || 'default',
-        vipUntil: data.vipUntil || null,
-        totalSpent: data.totalSpent || 0,
-      });
-    } catch (error) {
-      setError('Не удалось загрузить данные');
-      showNotification('error', '❌ Ошибка загрузки магазина');
+      if (!data || typeof data !== 'object') {
+        throw new Error('Неверный формат данных');
+      }
+
+      if (isMountedRef.current) {
+        setUserData({
+          id: userId,
+          points: typeof data.points === 'number' ? data.points : 0,
+          energy: typeof data.energy === 'number' ? data.energy : 1000,
+          maxEnergy: typeof data.maxEnergy === 'number' ? data.maxEnergy : 1000,
+          level: typeof data.level === 'number' ? data.level : 1,
+          exp: typeof data.exp === 'number' ? data.exp : 0,
+          passiveRate: typeof data.passiveRate === 'number' ? data.passiveRate : 0,
+          unclaimedPoints: typeof data.unclaimedPoints === 'number' ? data.unclaimedPoints : 0,
+          skin: typeof data.skin === 'string' ? data.skin : 'default',
+          vipUntil: data.vipUntil && typeof data.vipUntil === 'string' ? data.vipUntil : null,
+          totalSpent: typeof data.totalSpent === 'number' ? data.totalSpent : 0,
+        });
+        setError(null);
+      }
+      
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      
+      let errorMessage = 'Не удалось загрузить данные';
+      
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = 'Превышено время ожидания ответа от сервера';
+        } else if (err.message.includes('Failed to fetch')) {
+          errorMessage = 'Не удалось подключиться к серверу. Проверьте интернет-соединение.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Показываем уведомление только если это не первая загрузка
+      if (!initialLoadDoneRef.current) {
+        showNotification('error', `❌ ${errorMessage}`);
+      }
+      
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setIsRefreshing(false);
+        setIsLoading(false);
+        isFetchingRef.current = false;
+        initialLoadDoneRef.current = true;
+      }
     }
   }, [userId, showNotification]);
 
+  // Загружаем данные только один раз при монтировании
   useEffect(() => {
+    isMountedRef.current = true;
     fetchUserData();
-  }, [fetchUserData]);
+    
+    return () => {
+      isMountedRef.current = false;
+      isFetchingRef.current = false;
+    };
+  }, []); // Пустой массив зависимостей - эффект выполняется только один раз
 
-  // ✅ Исправлено: правильная типизация
   const handleBuyTon = useCallback((item: ShopItem) => {
     setSelectedItem(item);
     setIsTonModalOpen(true);
@@ -184,12 +245,26 @@ export function ShopPage() {
 
   const handleSuccess = useCallback(() => {
     showNotification('success', '✅ Покупка успешно завершена!');
+    // Сбрасываем флаг перед повторной загрузкой
+    isFetchingRef.current = false;
     fetchUserData();
   }, [fetchUserData, showNotification]);
 
   const handleError = useCallback((error: string) => {
     showNotification('error', `❌ ${error}`);
   }, [showNotification]);
+
+  const canAffordItem = useCallback((item: ShopItem): boolean => {
+    if (!userData) return false;
+    return true;
+  }, [userData]);
+
+  // Ручное обновление
+  const handleRefresh = useCallback(() => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = false;
+    fetchUserData();
+  }, [fetchUserData]);
 
   if (isLoading) {
     return (
@@ -209,20 +284,27 @@ export function ShopPage() {
       <ShopHeader
         userData={userData}
         isRefreshing={isRefreshing}
-        onRefresh={fetchUserData}
+        onRefresh={handleRefresh}
       />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-400" />
-            <p className="text-sm text-red-400 flex-1">{error}</p>
-            <button 
-              onClick={fetchUserData} 
-              className="text-xs text-red-400 hover:text-red-300 underline"
-            >
-              Повторить
-            </button>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-red-400 font-medium">{error}</p>
+                <p className="text-xs text-red-400/70 mt-1">
+                  Проверьте подключение к интернету и попробуйте снова
+                </p>
+              </div>
+              <button 
+                onClick={handleRefresh}
+                className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+              >
+                Повторить
+              </button>
+            </div>
           </div>
         )}
 
@@ -236,7 +318,7 @@ export function ShopPage() {
               onSuccess={handleSuccess}
               onError={handleError}
               isRefreshing={isRefreshing}
-              canAfford={true}
+              canAfford={canAffordItem(item)}
             />
           ))}
         </div>
@@ -253,7 +335,7 @@ export function ShopPage() {
           </p>
           {userData && userData.totalSpent > 0 && (
             <p className="text-[10px] text-slate-500 mt-2">
-              Всего потрачено: ${userData.totalSpent.toFixed(2)}
+              Всего потрачено: {userData.totalSpent.toFixed(2)} TON
             </p>
           )}
         </div>

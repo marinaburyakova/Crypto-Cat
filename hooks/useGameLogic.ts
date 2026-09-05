@@ -11,11 +11,11 @@ interface UseGameLogicProps {
   onNotificationFeedback?: (type: NotificationType) => void
 }
 
-export function useGameLogic({ 
-  userId, 
-  onNotification, 
-  onHaptic, 
-  onNotificationFeedback 
+export function useGameLogic({
+  userId,
+  onNotification,
+  onHaptic,
+  onNotificationFeedback,
 }: UseGameLogicProps) {
   const [points, setPoints] = useState<number>(0)
   const [energy, setEnergy] = useState<number>(1000)
@@ -32,21 +32,34 @@ export function useGameLogic({
   const comboTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMounted = useRef<boolean>(true)
 
+  const isDemo = userId === 'demo'
+
   // ✅ Загрузка данных
   const fetchUserData = useCallback(async () => {
-    console.log('🔄 fetchUserData called for userId:', userId)  // ✅ Добавлен лог
-    
+    console.log('🔄 fetchUserData called for userId:', userId)
+
+    // 🔥 Если демо-режим — не ходим на сервер
+    if (isDemo) {
+      setPoints(0)
+      setEnergy(1000)
+      setMaxEnergy(1000)
+      setLevel(1)
+      setExp(0)
+      setIsLoading(false)
+      return
+    }
+
     try {
       setIsLoading(true)
       setError(null)
 
       const res = await fetch(`/api/clicks?userId=${userId}`)
-      console.log('📡 API response status:', res.status)  // ✅ Добавлен лог
-      
+      console.log('📡 API response status:', res.status)
+
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
 
       const data = await res.json()
-      console.log('📦 API data:', data)  // ✅ Добавлен лог
+      console.log('📦 API data:', data)
 
       if (data.points !== undefined) setPoints(Number(data.points))
       if (data.energy !== undefined) setEnergy(Number(data.energy))
@@ -56,8 +69,7 @@ export function useGameLogic({
       setLevel(calculatedLevel)
       setExp(Number(data.points || 0) % 500)
 
-      console.log('✅ Data loaded successfully')  // ✅ Добавлен лог
-
+      console.log('✅ Data loaded successfully')
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Неизвестная ошибка'
       console.error('❌ Ошибка загрузки данных:', errorMsg)
@@ -69,18 +81,24 @@ export function useGameLogic({
       setExp(0)
     } finally {
       setIsLoading(false)
-      console.log('✅ isLoading set to false')  // ✅ Добавлен лог
+      console.log('✅ isLoading set to false')
     }
-  }, [userId])
+  }, [userId, isDemo])
 
   // ✅ ВАЖНО: Вызываем fetchUserData при монтировании
   useEffect(() => {
-    console.log('🔄 useGameLogic mounted, calling fetchUserData')  // ✅ Добавлен лог
+    console.log('🔄 useGameLogic mounted, calling fetchUserData')
     fetchUserData()
   }, [fetchUserData])
 
   // Отправка кликов
   useEffect(() => {
+    // 🔥 В демо-режиме не отправляем клики на сервер
+    if (isDemo) {
+      console.log('ℹ️ Демо-режим: клики не отправляются на сервер')
+      return
+    }
+
     const interval = setInterval(async () => {
       if (clicksBuffer.current === 0) return
 
@@ -96,7 +114,7 @@ export function useGameLogic({
         const data = await res.json()
 
         if (data.points && isMounted.current) {
-          setPoints(Number(data.points) + clicksBuffer.current * 10)
+          setPoints(Number(data.points))
         }
         if (data.energy !== undefined && isMounted.current) {
           setEnergy(Number(data.energy))
@@ -108,33 +126,41 @@ export function useGameLogic({
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [userId])
+  }, [userId, isDemo])
 
   // Обработка клика
-  const handleTap = useCallback((x: number, y: number) => {
-    const now = Date.now()
-    if (now - lastClickTime < 50) return
-    setLastClickTime(now)
+  const handleTap = useCallback(
+    (x: number, y: number) => {
+      const now = Date.now()
+      if (now - lastClickTime < 50) return
+      setLastClickTime(now)
 
-    if (energy <= 0) {
-      onNotification?.('warning', '😿 Энергия закончилась! Купи энергию в магазине')
-      onNotificationFeedback?.('warning')
-      return
-    }
+      if (energy <= 0) {
+        onNotification?.('warning', '😿 Энергия закончилась! Купи энергию в магазине')
+        onNotificationFeedback?.('warning')
+        return
+      }
 
-    setPoints(prev => prev + 10)
-    setEnergy(prev => Math.max(0, prev - 1))
-    clicksBuffer.current += 1
+      const newPoints = points + 10
+      setPoints(newPoints)
+      setEnergy((prev) => Math.max(0, prev - 1))
 
-    setComboCount(prev => {
-      const newCombo = prev + 1
-      if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current)
-      comboTimeoutRef.current = setTimeout(() => setComboCount(0), 2000)
-      return newCombo
-    })
+      // В демо-режиме не отправляем клики на сервер
+      if (!isDemo) {
+        clicksBuffer.current += 1
+      }
 
-    onHaptic?.('medium')
-  }, [energy, lastClickTime, onNotification, onNotificationFeedback, onHaptic])
+      setComboCount((prev) => {
+        const newCombo = prev + 1
+        if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current)
+        comboTimeoutRef.current = setTimeout(() => setComboCount(0), 2000)
+        return newCombo
+      })
+
+      onHaptic?.('medium')
+    },
+    [energy, lastClickTime, points, onNotification, onNotificationFeedback, onHaptic, isDemo]
+  )
 
   // Обновление уровня
   useEffect(() => {

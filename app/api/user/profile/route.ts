@@ -6,23 +6,17 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
-    const login = searchParams.get('login')
 
-    // Ищем по userId или login
-    let whereClause = {}
-    if (userId) {
-      whereClause = { id: userId }
-    } else if (login) {
-      whereClause = { login }
-    } else {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Missing userId or login' },
-        { status: 400 }
+        { success: false, error: 'Missing userId' },
+        { status: 400 },
       )
     }
 
+    // ✅ Ищем по id (первичный ключ)
     const user = await prisma.user.findUnique({
-      where: whereClause,
+      where: { id: userId },
       select: {
         id: true,
         login: true,
@@ -38,29 +32,27 @@ export async function GET(request: NextRequest) {
         totalSpent: true,
         createdAt: true,
         updatedAt: true,
-      }
+      },
     })
 
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
-        { status: 404 }
+        { status: 404 },
       )
     }
 
     return NextResponse.json({
       success: true,
       ...user,
-      // Преобразуем BigInt в number для клиента
       points: Number(user.points),
       unclaimedPoints: Number(user.unclaimedPoints),
     })
-
   } catch (error) {
     console.error('❌ Profile API error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

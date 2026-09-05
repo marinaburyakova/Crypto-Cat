@@ -2,21 +2,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { loginSchema } from '@/lib/validation/auth'
+import { ZodError } from 'zod'
 
 export async function POST(request: NextRequest) {
   try {
-    const { login, password } = await request.json()
+    // 1️⃣ Получаем данные
+    const body = await request.json()
+    console.log('🔐 Login attempt:', body.login)
 
-    if (!login || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Логин и пароль обязательны' },
-        { status: 400 }
-      )
-    }
+    // 2️⃣ Валидация
+    const validated = loginSchema.parse(body)
 
-    // Ищем пользователя
+    // 3️⃣ Поиск пользователя
     const user = await prisma.user.findUnique({
-      where: { login },
+      where: { login: validated.login },
       select: {
         id: true,
         login: true,
@@ -34,21 +34,24 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      console.log('❌ User not found:', validated.login)
       return NextResponse.json(
         { success: false, error: 'Неверный логин или пароль' },
         { status: 401 }
       )
     }
 
-    // Проверяем пароль
     if (!user.password) {
+      console.log('❌ User has no password:', validated.login)
       return NextResponse.json(
-        { success: false, error: 'Аккаунт не настроен. Обратитесь в поддержку' },
+        { success: false, error: 'Аккаунт не настроен' },
         { status: 401 }
       )
     }
 
-    const isValid = await bcrypt.compare(password, user.password)
+    const isValid = await bcrypt.compare(validated.password, user.password)
+    console.log('🔑 Password valid:', isValid)
+
     if (!isValid) {
       return NextResponse.json(
         { success: false, error: 'Неверный логин или пароль' },
@@ -56,16 +59,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Убираем пароль из ответа
     const { password: _, ...userWithoutPassword } = user
+
+    console.log('✅ Login success:', validated.login)
 
     return NextResponse.json({
       success: true,
-      user: userWithoutPassword
+      user: {
+        ...userWithoutPassword,
+        points: Number(userWithoutPassword.points),
+      }
     })
 
   } catch (error) {
     console.error('❌ Login error:', error)
+    
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, errors: error.issues.map(e => e.message) },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json(
       { success: false, error: 'Внутренняя ошибка сервера' },
       { status: 500 }

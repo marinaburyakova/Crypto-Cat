@@ -2,36 +2,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { registerSchema } from '@/lib/validation/auth'
+import { ZodError } from 'zod'
 
 export async function POST(request: NextRequest) {
   try {
-    const { login, password } = await request.json()
+    const body = await request.json()
+    console.log('📝 Register attempt:', body.login)
 
-    // Валидация
-    if (!login || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Логин и пароль обязательны' },
-        { status: 400 }
-      )
-    }
+    const validated = registerSchema.parse(body)
 
-    if (login.length < 3) {
-      return NextResponse.json(
-        { success: false, error: 'Логин должен быть минимум 3 символа' },
-        { status: 400 }
-      )
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json(
-        { success: false, error: 'Пароль должен быть минимум 6 символов' },
-        { status: 400 }
-      )
-    }
-
-    // Проверяем, существует ли пользователь
     const existingUser = await prisma.user.findUnique({
-      where: { login }
+      where: { login: validated.login }
     })
 
     if (existingUser) {
@@ -41,14 +23,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Хешируем пароль
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const saltRounds = 12
+    const hashedPassword = await bcrypt.hash(validated.password, saltRounds)
 
-    // Создаём пользователя
     const user = await prisma.user.create({
       data: {
         id: crypto.randomUUID(),
-        login,
+        login: validated.login,
         password: hashedPassword,
         points: 0,
         energy: 1000,
@@ -70,14 +51,34 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    console.log('✅ New user:', user.login)
+
     return NextResponse.json({
       success: true,
       message: 'Регистрация успешна',
-      user
+      user: {
+        id: user.id,
+        login: user.login,
+        points: Number(user.points),
+        energy: user.energy,
+        maxEnergy: user.maxEnergy,
+        level: user.level,
+        exp: user.exp,
+        skin: user.skin,
+        createdAt: user.createdAt,
+      }
     })
 
   } catch (error) {
     console.error('❌ Register error:', error)
+    
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, errors: error.issues.map(e => e.message) },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json(
       { success: false, error: 'Внутренняя ошибка сервера' },
       { status: 500 }
