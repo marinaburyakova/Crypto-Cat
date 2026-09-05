@@ -69,7 +69,7 @@ model PointHistory {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount        BigInt    @default(0)  // ✅ Изменено на BigInt
+  amount        BigInt    @default(0)
   type          PointType @default(PURCHASE)
   description   String
   transactionId String?   @unique
