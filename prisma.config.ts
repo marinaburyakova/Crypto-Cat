@@ -1,5 +1,9 @@
-import 'dotenv/config'
-import { defineConfig, env } from 'prisma/config'
+// prisma.config.ts
+import { defineConfig } from 'prisma/config'
+import dotenv from 'dotenv'
+
+// Явно загружаем переменные из корня текущего рабочего процесса
+dotenv.config() 
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -7,7 +11,7 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    // Prisma CLI (migrate, db push) теперь берет URL отсюда
-    url: env('DATABASE_URL'),
+    // Используем process.env с фолбеком на случай задержки чтения
+    url: process.env.DATABASE_URL || '', 
   },
 })
