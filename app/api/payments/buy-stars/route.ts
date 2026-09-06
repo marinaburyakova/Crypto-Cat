@@ -9,7 +9,6 @@ export async function POST(request: NextRequest) {
 
     console.log('📦 Buy Stars request:', { userId, type, itemName, price })
 
-    // ✅ Проверка обязательных полей
     if (!userId || !type) {
       return NextResponse.json(
         { error: 'Missing required fields: userId, type' },
@@ -17,29 +16,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 🔥 ЗАПРЕЩАЕМ демо-режим для Stars
-    if (userId === 'demo') {
-      return NextResponse.json(
-        { error: 'Демо-режим: покупка за Stars недоступна. Пожалуйста, войдите в аккаунт.' },
-        { status: 403 }
-      )
-    }
-
-    // ✅ Проверяем, что пользователь существует в БД
-    const user = await prisma.user.findUnique({
+    // ✅ Автоматически создаём пользователя, если его нет
+    const user = await prisma.user.upsert({
       where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        login: userId,
+        points: 0,
+        energy: 1000,
+        maxEnergy: 1000,
+        level: 1,
+        exp: 0,
+        passiveRate: 0,
+        skin: 'default',
+      },
     })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found. Пожалуйста, зарегистрируйтесь.' },
-        { status: 404 }
-      )
-    }
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     
-    // 🔥 Формируем payload в зависимости от типа
     let payload = `stars_${type}_${userId}_${Date.now()}`
     let description = itemName || 'Покупка в магазине'
     
@@ -83,7 +78,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 🔥 Сохраняем транзакцию
     await prisma.transaction.create({
       data: {
         userId,
@@ -93,10 +87,7 @@ export async function POST(request: NextRequest) {
         payload: payload,
         sku: itemSku,
         itemName: itemName,
-        metadata: {
-          type,
-          data,
-        },
+        metadata: { type, data },
       },
     })
 

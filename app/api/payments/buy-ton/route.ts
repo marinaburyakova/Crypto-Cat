@@ -2,123 +2,104 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// Цены в TON
-const TON_PRICES = {
-  100: 0.5,
-  500: 2.0,
-  1000: 3.5,
-  5000: 15.0,
-} as const
-
-type EnergyAmount = keyof typeof TON_PRICES
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, amount, type = 'energy', itemName = 'Энергия' } = body
+    const { userId, type, itemName, itemSku, price, data } = body
 
-    console.log('📦 Buy TON request:', { userId, amount, type, itemName })
+    console.log('📦 Buy TON request:', { userId, type, itemName, price })
 
-    if (!userId || !amount) {
+    if (!userId || !type) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, amount' },
+        { error: 'Missing required fields: userId, type' },
         { status: 400 }
       )
     }
 
-    if (userId === 'demo') {
-      return NextResponse.json(
-        { error: 'Демо-режим: покупка за TON недоступна' },
-        { status: 403 }
-      )
-    }
-
-    const tonPrice = TON_PRICES[amount as EnergyAmount]
-    if (!tonPrice) {
-      return NextResponse.json(
-        { error: 'Invalid amount' },
-        { status: 400 }
-      )
-    }
-
-    // Проверяем пользователя
-    const user = await prisma.user.findUnique({
+    // ✅ Автоматически создаём пользователя, если его нет
+    const user = await prisma.user.upsert({
       where: { id: userId },
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // 🔥 Получаем настройки TON
-    const merchantWallet = process.env.MERCHANT_WALLET_ADDRESS
-    const isTestnet = process.env.TON_NETWORK === 'testnet'
-
-    if (!merchantWallet) {
-      console.error('❌ MERCHANT_WALLET_ADDRESS not configured')
-      return NextResponse.json(
-        { error: 'Платежи за TON временно недоступны' },
-        { status: 503 }
-      )
-    }
-
-    // 🔥 Генерируем уникальный ID платежа
-    const paymentId = `ton_${userId}_${amount}_${Date.now()}`
-    const comment = `Energy ${amount}` // Будет видно в кошельке
-
-    // 🔥 Формируем ссылку для Tonkeeper
-    // Формат: ton://transfer/<адрес>?amount=<сумма>&comment=<комментарий>
-    const tonAmount = tonPrice * 1000000000 // 1 TON = 10^9 нано-TON
-    
-    // 🔥 Кодируем комментарий в hex (TON требует hex для комментариев)
-    const commentHex = Buffer.from(comment, 'utf-8').toString('hex')
-    
-    // 🔥 Ссылка для Tonkeeper
-    const paymentLink = `ton://transfer/${merchantWallet}?amount=${tonAmount}&text=${comment}`
-
-    // 🔥 Для тестнета используем другой формат ссылки
-    const finalPaymentLink = isTestnet 
-      ? `ton://transfer/${merchantWallet}?amount=${tonAmount}&text=${comment}&test=true`
-      : paymentLink
-
-    console.log('🔗 Payment link:', finalPaymentLink)
-    console.log('💳 Payment ID:', paymentId)
-    console.log('💰 Amount:', tonPrice, 'TON')
-    console.log('📝 Comment:', comment)
-
-    // 🔥 Сохраняем транзакцию в БД (статус PENDING)
-    await prisma.transaction.create({
-      data: {
-        userId,
-        amount: tonPrice,
-        currency: 'TON',
-        status: 'PENDING',
-        payload: paymentId,
-        sku: `energy_${amount}`,
-        itemName: itemName,
-        metadata: {
-          amount,
-          tonPrice,
-          merchantWallet,
-          comment,
-          isTestnet,
-          paymentLink: finalPaymentLink,
-        },
+      update: {},
+      create: {
+        id: userId,
+        login: userId,
+        points: 0,
+        energy: 1000,
+        maxEnergy: 1000,
+        level: 1,
+        exp: 0,
+        passiveRate: 0,
+        skin: 'default',
       },
     })
 
-    // 🔥 Возвращаем ссылку для оплаты
+    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    const isTestnet = process.env.TON_NETWORK === 'testnet'
+    
+    let payload = `ton_${type}_${userId}_${Date.now()}`
+    let description = itemName || 'Покупка в магазине'
+    
+    if (type === 'energy') {
+      payload = `ton_energy_${data.amount}_${userId}_${Date.now()}`
+      description = `${data.amount} энергии за TON`
+    } else if (type === 'boost') {
+      payload = `ton_boost_${data.effect}_${data.value}_${userId}_${Date.now()}`
+      description = `Буст: ${data.effect} +${data.value} за TON`
+    }
+
+    const tonAmount = Math.round(parseFloat(price) * 1000000000)
+
+    const invoiceParams: any = {
+      title: itemName || 'Покупка за TON',
+      description: description,
+      payload: payload,
+      currency: 'TON',
+      prices: [{ label: itemName || 'Товар', amount: tonAmount }],
+    }
+
+    if (isTestnet) {
+      invoiceParams.test = true
+      console.log('🧪 TON Testnet mode enabled')
+    }
+
+    const invoiceResponse = await fetch(
+      `https://api.telegram.org/bot${botToken}/createInvoiceLink`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invoiceParams),
+      }
+    )
+
+    const invoiceData = await invoiceResponse.json()
+
+    if (!invoiceData.ok) {
+      console.error('❌ Telegram TON invoice error:', invoiceData)
+      return NextResponse.json(
+        { error: 'Failed to create TON invoice' },
+        { status: 500 }
+      )
+    }
+
+    await prisma.transaction.create({
+      data: {
+        userId,
+        amount: parseFloat(price),
+        currency: 'TON',
+        status: 'PENDING',
+        payload: payload,
+        sku: itemSku,
+        itemName: itemName,
+        metadata: { type, data, isTestnet },
+      },
+    })
+
+    console.log('✅ TON invoice created for user:', userId)
+
     return NextResponse.json({
       success: true,
-      paymentId,
-      amount: tonPrice,
-      merchantWallet,
-      comment,
-      paymentLink: finalPaymentLink,
-      isTestnet,
+      invoiceLink: invoiceData.result,
+      payload: payload,
     })
   } catch (error) {
     console.error('❌ Buy TON error:', error)

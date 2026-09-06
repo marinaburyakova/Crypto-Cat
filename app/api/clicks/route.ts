@@ -9,121 +9,53 @@ export async function GET(request: NextRequest) {
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Missing userId' },
+        { error: 'UserId is required' },
         { status: 400 }
       )
     }
 
-    // Ищем пользователя в БД
-    let user = await prisma.user.findUnique({
+    console.log('📊 GET /api/clicks for user:', userId)
+
+    // ✅ Автоматически создаём пользователя, если его нет
+    const user = await prisma.user.upsert({
       where: { id: userId },
-      select: {
-        id: true,
-        login: true,
-        points: true,
-        energy: true,
-        maxEnergy: true,
-        level: true,
-        exp: true,
-        unclaimedPoints: true,
-        passiveRate: true,
-        skin: true,
-        vipUntil: true,
-        totalSpent: true,
-        createdAt: true,
-        updatedAt: true,
-      }
-    })
-
-    // Если пользователь не найден — создаём
-    if (!user) {
-      console.log(`👤 Creating new user: ${userId}`)
-      user = await prisma.user.create({
-        data: {
-          id: userId,
-          login: userId,
-          points: 0,
-          energy: 1000,
-          maxEnergy: 1000,
-          level: 1,
-          exp: 0,
-          skin: 'default',
-        },
-        select: {
-          id: true,
-          login: true,
-          points: true,
-          energy: true,
-          maxEnergy: true,
-          level: true,
-          exp: true,
-          unclaimedPoints: true,
-          passiveRate: true,
-          skin: true,
-          vipUntil: true,
-          totalSpent: true,
-          createdAt: true,
-          updatedAt: true,
-        }
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      ...user,
-      points: Number(user.points),
-      unclaimedPoints: Number(user.unclaimedPoints),
-    })
-
-  } catch (error) {
-    console.error('❌ GET /api/clicks error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const { userId, clicks } = await request.json()
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Missing userId' },
-        { status: 400 }
-      )
-    }
-
-    // Обновляем пользователя: увеличиваем points, уменьшаем energy
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        points: { increment: clicks * 10 },
-        energy: { decrement: clicks },
+      update: {},
+      create: {
+        id: userId,
+        login: userId,
+        points: 0,
+        energy: 1000,
+        maxEnergy: 1000,
+        level: 1,
+        exp: 0,
+        passiveRate: 0,
+        skin: 'default',
       },
-      select: {
-        points: true,
-        energy: true,
-        maxEnergy: true,
-        level: true,
-        exp: true,
-      }
+    })
+
+    console.log('✅ User data:', {
+      id: user.id,
+      points: Number(user.points),
+      energy: user.energy,
+      level: user.level,
     })
 
     return NextResponse.json({
-      success: true,
       points: Number(user.points),
       energy: user.energy,
       maxEnergy: user.maxEnergy,
       level: user.level,
       exp: user.exp,
+      passiveRate: user.passiveRate,
+      unclaimedPoints: Number(user.unclaimedPoints) || 0,
+      skin: user.skin,
+      vipUntil: user.vipUntil,
+      totalSpent: Number(user.totalSpent) || 0,
     })
-
   } catch (error) {
-    console.error('❌ POST /api/clicks error:', error)
+    console.error('❌ Error in /api/clicks:', error)
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
