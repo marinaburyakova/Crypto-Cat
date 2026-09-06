@@ -1,23 +1,30 @@
 // app/api/payments/buy-ton/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, type, itemName, itemSku, price, data } = body
+    const { userId, amount } = body
 
-    console.log('📦 Buy TON request:', { userId, type, itemName, price })
-
-    if (!userId || !type) {
+    // 1. ✅ Валидация входных данных
+    if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, type' },
-        { status: 400 },
+        { error: 'Invalid userId' },
+        { status: 400 }
       )
     }
 
-    // ✅ Автоматически создаём пользователя, если его нет
-    const user = await prisma.user.upsert({
+    if (!amount || typeof amount !== 'number' || amount <= 0 || amount > 10000) {
+      return NextResponse.json(
+        { error: 'Invalid amount (must be 1-10000)' },
+        { status: 400 }
+      )
+    }
+
+    // 2. ✅ Проверка пользователя
+    await prisma.user.upsert({
       where: { id: userId },
       update: {},
       create: {
@@ -33,89 +40,68 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    // 3. ✅ Настройки TON
+    const merchantWallet = process.env.MERCHANT_WALLET_ADDRESS
     const isTestnet = process.env.TON_NETWORK === 'testnet'
 
-    let payload = `ton_${type}_${userId}_${Date.now()}`
-    let description = itemName || 'Покупка в магазине'
-
-    if (type === 'energy') {
-      payload = `ton_energy_${data.amount}_${userId}_${Date.now()}`
-      description = `${data.amount} энергии за TON`
-    } else if (type === 'boost') {
-      payload = `ton_boost_${data.effect}_${data.value}_${userId}_${Date.now()}`
-      description = `Буст: ${data.effect} +${data.value} за TON`
-    } else if (type === 'level') {
-      payload = `ton_level_${data.value}_${userId}_${Date.now()}`
-      description = `Повышение уровня +${data.value} за TON`
-    } else if (type === 'vip') {
-      payload = `ton_vip_${data.value}_${userId}_${Date.now()}`
-      description = `VIP на ${data.value} дней за TON`
-    }
-
-    // 1 TON = 1,000,000,000 нано-TON
-    const tonAmount = Math.round(parseFloat(price) * 1000000000)
-
-    const invoiceParams: any = {
-      title: itemName || 'Покупка за TON',
-      description: description,
-      payload: payload,
-      currency: 'TON',
-      prices: [{ label: itemName || 'Товар', amount: tonAmount }],
-    }
-
-    // Для тестнета добавляем test: true
-    if (isTestnet) {
-      invoiceParams.test = true
-      console.log('🧪 TON Testnet mode enabled')
-    }
-
-    // 🔥 Создаём инвойс в Telegram за TON
-    const invoiceResponse = await fetch(
-      `https://api.telegram.org/bot${botToken}/createInvoiceLink`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invoiceParams),
-      },
-    )
-
-    const invoiceData = await invoiceResponse.json()
-
-    if (!invoiceData.ok) {
-      console.error('❌ Telegram TON invoice error:', invoiceData)
+    if (!merchantWallet) {
+      console.error('❌ MERCHANT_WALLET_ADDRESS is missing')
       return NextResponse.json(
-        { error: 'Failed to create TON invoice' },
-        { status: 500 },
+        { error: 'Server configuration error' },
+        { status: 500 }
       )
     }
 
-    // Сохраняем транзакцию
-    await prisma.transaction.create({
+    // 4. ✅ Создаём заказ в БД
+    const order = await prisma.transaction.create({
       data: {
-        userId,
-        amount: parseFloat(price),
+        userId: userId,
+        amount: amount * 0.5, // 0.5 TON за 1 энергию
         currency: 'TON',
         status: 'PENDING',
-        payload: payload,
-        sku: itemSku,
-        itemName: itemName,
-        metadata: { type, data, isTestnet },
+        payload: `ton_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+        sku: 'energy',
+        itemName: `${amount} энергии`,
       },
     })
 
-    console.log('✅ TON invoice created for user:', userId)
+    // 5. ✅ Уникальный комментарий для отслеживания
+    const comment = `order:${order.id}|user:${userId}`
+
+    // 6. ✅ Расчёт суммы в NanoTON
+    const tonAmount = amount * 0.5 // 0.5 TON за 1 энергию
+    const nanoAmount = Math.round(tonAmount * 1_000_000_000)
+
+    // 7. ✅ Выбор правильного протокола
+    // Для тестнета используем ton-testnet://, для мейннета ton://
+    const protocol = isTestnet ? 'ton-testnet' : 'ton'
+
+    // 8. ✅ Ссылка для Tonkeeper
+    const paymentLink = `${protocol}://transfer/${merchantWallet}?amount=${nanoAmount}&text=${encodeURIComponent(comment)}`
+
+    console.log('🔗 TON payment link generated:', {
+      userId,
+      amount,
+      tonAmount,
+      comment,
+      isTestnet,
+      orderId: order.id,
+    })
 
     return NextResponse.json({
       success: true,
-      invoiceLink: invoiceData.result,
-      payload: payload,
+      paymentLink: paymentLink,
+      amount: tonAmount,
+      merchantWallet: merchantWallet,
+      isTestnet: isTestnet,
+      comment: comment,
+      orderId: order.id,
     })
   } catch (error) {
-    console.error('❌ Buy TON error:', error)
+    console.error('❌ Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
+      { error: 'Server error' },
+      { status: 500 }
     )
   }
 }

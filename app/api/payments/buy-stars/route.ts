@@ -5,18 +5,26 @@ import { prisma } from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, type, itemName, itemSku, price, data } = body
+    const { userId, amount } = body
 
-    console.log('📦 Buy Stars request:', { userId, type, itemName, price })
+    // 1. ✅ Валидация входных данных
+    if (!userId || typeof userId !== 'string') {
+      return NextResponse.json({ error: 'Invalid userId' }, { status: 400 })
+    }
 
-    if (!userId || !type) {
+    if (
+      !amount ||
+      typeof amount !== 'number' ||
+      amount <= 0 ||
+      amount > 10000
+    ) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, type' },
-        { status: 400 }
+        { error: 'Invalid amount (must be 1-10000)' },
+        { status: 400 },
       )
     }
 
-    // ✅ Автоматически создаём пользователя, если его нет
+    // 2. ✅ Проверка пользователя (или создание)
     const user = await prisma.user.upsert({
       where: { id: userId },
       update: {},
@@ -33,77 +41,76 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // 3. ✅ Проверка токена бота
     const botToken = process.env.TELEGRAM_BOT_TOKEN
-    
-    let payload = `stars_${type}_${userId}_${Date.now()}`
-    let description = itemName || 'Покупка в магазине'
-    
-    if (type === 'energy') {
-      payload = `stars_energy_${data.amount}_${userId}_${Date.now()}`
-      description = `${data.amount} энергии`
-    } else if (type === 'boost') {
-      payload = `stars_boost_${data.effect}_${data.value}_${userId}_${Date.now()}`
-      description = `Буст: ${data.effect} +${data.value}`
-    } else if (type === 'level') {
-      payload = `stars_level_${data.value}_${userId}_${Date.now()}`
-      description = `Повышение уровня +${data.value}`
-    } else if (type === 'vip') {
-      payload = `stars_vip_${data.value}_${userId}_${Date.now()}`
-      description = `VIP на ${data.value} дней`
+    if (!botToken) {
+      console.error('❌ TELEGRAM_BOT_TOKEN is missing')
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 },
+      )
     }
 
-    // 🔥 Создаём инвойс в Telegram за Stars
-    const invoiceResponse = await fetch(
+    // 4. ✅ Создаём заказ в БД (для трекинга)
+    const order = await prisma.transaction.create({
+      data: {
+        userId: userId,
+        amount: amount,
+        currency: 'STARS',
+        status: 'PENDING',
+        payload: `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        sku: 'energy',
+        itemName: `${amount} энергии`,
+      },
+    })
+
+    // 5. ✅ Запрос к Telegram API (правильный!)
+    const response = await fetch(
       `https://api.telegram.org/bot${botToken}/createInvoiceLink`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: itemName || 'Покупка за Stars',
-          description: description,
-          payload: payload,
-          currency: 'XTR', // Telegram Stars
-          prices: [{ label: itemName || 'Товар', amount: price * 100 }],
+          title: `${amount} энергии`,
+          description: `Покупка ${amount} единиц энергии`,
+          payload: order.payload, // ← только orderId
+          provider_token: '', // ✅ явно пустая строка
+          currency: 'XTR',
+          prices: [
+            {
+              label: 'Энергия',
+              amount: amount, // ✅ БЕЗ множителя! 50 Stars = 50
+            },
+          ],
         }),
-      }
+      },
     )
 
-    const invoiceData = await invoiceResponse.json()
+    const data = await response.json()
 
-    if (!invoiceData.ok) {
-      console.error('❌ Telegram Stars invoice error:', invoiceData)
+    if (!data.ok) {
+      console.error('❌ Telegram API Error:', data)
+
+      // Отменяем заказ
+      await prisma.transaction.update({
+        where: { id: order.id },
+        data: { status: 'FAILED' },
+      })
+
       return NextResponse.json(
-        { error: 'Failed to create Stars invoice' },
-        { status: 500 }
+        { error: data.description || 'Payment error' },
+        { status: 400 },
       )
     }
 
-    // Сохраняем транзакцию
-    await prisma.transaction.create({
-      data: {
-        userId,
-        amount: price,
-        currency: 'STARS',
-        status: 'PENDING',
-        payload: payload,
-        sku: itemSku,
-        itemName: itemName,
-        metadata: { type, data },
-      },
-    })
-
-    console.log('✅ Stars invoice created for user:', userId)
-
+    // ✅ Успешно
     return NextResponse.json({
       success: true,
-      invoiceLink: invoiceData.result,
-      payload: payload,
+      invoiceLink: data.result,
+      orderId: order.id,
     })
   } catch (error) {
-    console.error('❌ Buy Stars error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ Error:', error)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
