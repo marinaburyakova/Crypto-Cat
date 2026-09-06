@@ -36,7 +36,6 @@ export function useAuth(): UseAuthReturn {
   const [error, setError] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // 🔥 Загрузка при монтировании
   useEffect(() => {
     if (isInitialized) return
 
@@ -94,8 +93,8 @@ export function useAuth(): UseAuthReturn {
     loadAuth()
   }, [isInitialized])
 
-  // 🔐 Вход
   const login = useCallback(async (login: string, password: string) => {
+    console.log('🔐 useAuth.login НАЧАЛО:', login)
     setIsLoading(true)
     setError(null)
 
@@ -146,22 +145,29 @@ export function useAuth(): UseAuthReturn {
     }
   }, [])
 
-  // 📝 Регистрация
   const register = useCallback(async (login: string, password: string) => {
+    console.log('📝 useAuth.register НАЧАЛО:', login)
     setIsLoading(true)
     setError(null)
 
     try {
+      const body = JSON.stringify({ login, password })
+      console.log('📡 Body:', body)
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, password }),
+        body,
       })
 
+      console.log('📡 Статус ответа:', response.status)
       const data = await response.json()
+      console.log('📦 Данные ответа:', data)
 
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка регистрации')
+        const errorMsg = data.error || data.errors?.[0] || 'Ошибка регистрации'
+        console.error('❌ Ошибка от сервера:', errorMsg)
+        throw new Error(errorMsg)
       }
 
       localStorage.setItem('catAuth', JSON.stringify({
@@ -187,6 +193,8 @@ export function useAuth(): UseAuthReturn {
       setIsInitialized(true)
       setIsLoading(false)
 
+      console.log('✅ Регистрация выполнена для:', login)
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка регистрации'
       console.error('❌ Ошибка регистрации:', message)
@@ -196,7 +204,6 @@ export function useAuth(): UseAuthReturn {
     }
   }, [])
 
-  // 🚪 Выход
   const logout = useCallback(() => {
     localStorage.removeItem('catAuth')
     setUser(null)
