@@ -7,25 +7,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { userId, amount } = body
 
-    // 1. ✅ Валидация входных данных
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json({ error: 'Invalid userId' }, { status: 400 })
-    }
+    console.log('📦 Buy Stars request:', { userId, amount })
 
-    if (
-      !amount ||
-      typeof amount !== 'number' ||
-      amount <= 0 ||
-      amount > 10000
-    ) {
+    // 1. ✅ Валидация
+    if (!userId || !amount || typeof amount !== 'number' || amount <= 0) {
       return NextResponse.json(
-        { error: 'Invalid amount (must be 1-10000)' },
-        { status: 400 },
+        { error: 'Invalid userId or amount' },
+        { status: 400 }
       )
     }
 
-    // 2. ✅ Проверка пользователя (или создание)
-    const user = await prisma.user.upsert({
+    // 2. ✅ Создаём пользователя если нет
+    await prisma.user.upsert({
       where: { id: userId },
       update: {},
       create: {
@@ -41,30 +34,17 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 3. ✅ Проверка токена бота
+    // 3. ✅ Проверяем токен
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     if (!botToken) {
       console.error('❌ TELEGRAM_BOT_TOKEN is missing')
       return NextResponse.json(
         { error: 'Server configuration error' },
-        { status: 500 },
+        { status: 500 }
       )
     }
 
-    // 4. ✅ Создаём заказ в БД (для трекинга)
-    const order = await prisma.transaction.create({
-      data: {
-        userId: userId,
-        amount: amount,
-        currency: 'STARS',
-        status: 'PENDING',
-        payload: `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        sku: 'energy',
-        itemName: `${amount} энергии`,
-      },
-    })
-
-    // 5. ✅ Запрос к Telegram API (правильный!)
+    // 4. ✅ Создаём инвойс в Telegram
     const response = await fetch(
       `https://api.telegram.org/bot${botToken}/createInvoiceLink`,
       {
@@ -72,45 +52,39 @@ export async function POST(request: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: `${amount} энергии`,
-          description: `Покупка ${amount} единиц энергии`,
-          payload: order.payload, // ← только orderId
-          provider_token: '', // ✅ явно пустая строка
+          description: `Покупка ${amount} энергии для вашего аккаунта`,
+          payload: `energy_${userId}_${Date.now()}`,
+          provider_token: '', // ✅ Явно пустая строка для Stars
           currency: 'XTR',
-          prices: [
-            {
-              label: 'Энергия',
-              amount: amount, // ✅ БЕЗ множителя! 50 Stars = 50
-            },
-          ],
+          prices: [{ 
+            label: 'Энергия', 
+            amount: amount // ✅ БЕЗ множителя! 5 Stars = 5
+          }],
         }),
-      },
+      }
     )
 
     const data = await response.json()
 
     if (!data.ok) {
       console.error('❌ Telegram API Error:', data)
-
-      // Отменяем заказ
-      await prisma.transaction.update({
-        where: { id: order.id },
-        data: { status: 'FAILED' },
-      })
-
       return NextResponse.json(
         { error: data.description || 'Payment error' },
-        { status: 400 },
+        { status: 400 }
       )
     }
 
-    // ✅ Успешно
+    console.log('✅ Invoice created:', data.result)
+
     return NextResponse.json({
       success: true,
       invoiceLink: data.result,
-      orderId: order.id,
     })
   } catch (error) {
     console.error('❌ Error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Server error' },
+      { status: 500 }
+    )
   }
 }
