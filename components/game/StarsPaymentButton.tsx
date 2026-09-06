@@ -55,10 +55,8 @@ export function StarsPaymentButton({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId,
-          itemPriceStars,
-          itemSku,
-          itemName,
+          userId: userId,
+          amount: itemPriceStars,
         }),
       })
 
