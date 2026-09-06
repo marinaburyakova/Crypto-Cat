@@ -6,14 +6,20 @@ export const CAT_MODELS = {
   legendary: '/assets/models/cat_legendary.glb',
 } as const
 
+// 🔥 ЕДИНЫЕ ПОРОГИ
+export const THRESHOLDS = {
+  SUPERHERO: 100,
+  LEGENDARY: 500,
+} as const
+
 export const getCatModel = (score: number): string => {
-  if (score >= 1000) return CAT_MODELS.legendary
-  if (score >= 50) return CAT_MODELS.superhero
+  if (score >= THRESHOLDS.LEGENDARY) return CAT_MODELS.legendary
+  if (score >= THRESHOLDS.SUPERHERO) return CAT_MODELS.superhero
   return CAT_MODELS.default
 }
 
 export const getCatInfo = (score: number) => {
-  if (score >= 1000) {
+  if (score >= THRESHOLDS.LEGENDARY) {
     return {
       name: 'Легендарный кот',
       emoji: '👑',
@@ -23,7 +29,7 @@ export const getCatInfo = (score: number) => {
       borderColor: 'border-yellow-500/30',
     }
   }
-  if (score >= 50) {
+  if (score >= THRESHOLDS.SUPERHERO) {
     return {
       name: 'Кот-супергерой',
       emoji: '🦸‍♂️',

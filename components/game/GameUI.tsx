@@ -8,21 +8,19 @@ import { GameStats } from './GameStats'
 import { GamePlayArea } from './GamePlayArea'
 import { GameBottomPanel } from './GameBottomPanel'
 import { GameModals } from './GameModals'
-import { GameAchievementNotifier } from './GameAchievementNotifier'
+// import { GameAchievementNotifier } from './GameAchievementNotifier' // ❌ УДАЛЕН - больше не нужен
 import { GameScoreAnimation } from './GameScoreAnimation'
 import { useGameLogic } from '@/hooks/useGameLogic'
 import { useTelegram } from '@/hooks/useTelegram'
 import { useNotification } from '@/components/ui/Notification'
-import { getCatModel, getCatInfo } from './GameConfig'
+import { getCatModel, getCatInfo, THRESHOLDS } from './GameConfig'
 import { BottomNav } from '@/components/ui/BottomNav'
-import { useRouter } from 'next/navigation'
 
 interface GameUIProps {
   userId: string
 }
 
 export function GameUI({ userId }: GameUIProps) {
-  const router = useRouter()
   const { hapticFeedback, notificationFeedback } = useTelegram()
   const { showNotification, NotificationComponent } = useNotification()
 
@@ -57,81 +55,93 @@ export function GameUI({ userId }: GameUIProps) {
   const [userStars, setUserStars] = useState(0)
 
   const catInfo = useMemo(() => getCatInfo(points), [points])
-  const isSuperhero = points >= 50
-  const isLegendary = points >= 1000
+  // 🔥 Используем единые пороги из GameConfig
+  const isSuperhero = points >= THRESHOLDS.SUPERHERO
+  const isLegendary = points >= THRESHOLDS.LEGENDARY
 
   useEffect(() => {
     setUserStars(points)
   }, [points])
 
-  const handleBuyEnergyStars = useCallback(async (amount: number) => {
-    setIsBuyingEnergy(true)
-    try {
-      const response = await fetch('/api/payments/energy/buy-stars', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount }),
-      })
+  const handleBuyEnergyStars = useCallback(
+    async (amount: number) => {
+      setIsBuyingEnergy(true)
+      try {
+        const response = await fetch('/api/payments/energy/buy-stars', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, amount }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Ошибка покупки')
-      }
-
-      setEnergy(data.energy)
-      setPoints(data.starsRemaining)
-      setUserStars(data.starsRemaining)
-
-      showNotification('success', `✅ Куплено ${data.energyAdded} энергии!`)
-      setShowEnergyModal(false)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Ошибка покупки'
-      showNotification('error', `❌ ${errorMsg}`)
-    } finally {
-      setIsBuyingEnergy(false)
-    }
-  }, [userId, setEnergy, setPoints, showNotification])
-
-  const handleBuyEnergyTon = useCallback(async (amount: number) => {
-    setIsBuyingEnergy(true)
-    try {
-      const response = await fetch('/api/payments/energy/buy-ton', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Ошибка покупки за TON')
-      }
-
-      if (data.tonUri) {
-        window.open(data.tonUri, '_blank')
-      }
-
-      showNotification('info', '⏳ Ожидайте подтверждение оплаты TON...')
-      setShowEnergyModal(false)
-
-      setTimeout(async () => {
-        const statusResponse = await fetch(
-          `/api/payments/check-status?payload=${data.memo}&userId=${userId}`
-        )
-        const statusData = await statusResponse.json()
-        if (statusData.status === 'SUCCESS' || statusData.status === 'COMPLETED') {
-          showNotification('success', '✅ Оплата TON подтверждена!')
-          fetchUserData()
+        if (!response.ok) {
+          throw new Error(data.error || 'Ошибка покупки')
         }
-      }, 10000)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Ошибка покупки за TON'
-      showNotification('error', `❌ ${errorMsg}`)
-    } finally {
-      setIsBuyingEnergy(false)
-    }
-  }, [userId, showNotification, fetchUserData])
+
+        setEnergy(data.energy)
+        setPoints(data.starsRemaining)
+        setUserStars(data.starsRemaining)
+
+        showNotification('success', `✅ Куплено ${data.energyAdded} энергии!`)
+        setShowEnergyModal(false)
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : 'Ошибка покупки'
+        showNotification('error', `❌ ${errorMsg}`)
+      } finally {
+        setIsBuyingEnergy(false)
+      }
+    },
+    [userId, setEnergy, setPoints, showNotification],
+  )
+
+  const handleBuyEnergyTon = useCallback(
+    async (amount: number) => {
+      setIsBuyingEnergy(true)
+      try {
+        const response = await fetch('/api/payments/energy/buy-ton', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, amount }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Ошибка покупки за TON')
+        }
+
+        if (data.tonUri) {
+          window.open(data.tonUri, '_blank')
+        }
+
+        showNotification('info', '⏳ Ожидайте подтверждение оплаты TON...')
+        setShowEnergyModal(false)
+
+        setTimeout(async () => {
+          const statusResponse = await fetch(
+            `/api/payments/check-status?payload=${data.memo}&userId=${userId}`,
+          )
+          const statusData = await statusResponse.json()
+          if (
+            statusData.status === 'SUCCESS' ||
+            statusData.status === 'COMPLETED'
+          ) {
+            showNotification('success', '✅ Оплата TON подтверждена!')
+            fetchUserData()
+          }
+        }, 10000)
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : 'Ошибка покупки за TON'
+        showNotification('error', `❌ ${errorMsg}`)
+      } finally {
+        setIsBuyingEnergy(false)
+      }
+    },
+    [userId, showNotification, fetchUserData],
+  )
 
   const handleBuyBoost = useCallback(() => {
     setIsTonModalOpen(true)
@@ -143,9 +153,12 @@ export function GameUI({ userId }: GameUIProps) {
     fetchUserData()
   }, [fetchUserData, showNotification, notificationFeedback])
 
-  const handleTonError = useCallback((error: string) => {
-    showNotification('error', `❌ ${error}`)
-  }, [showNotification])
+  const handleTonError = useCallback(
+    (error: string) => {
+      showNotification('error', `❌ ${error}`)
+    },
+    [showNotification],
+  )
 
   if (isLoading) {
     return <GameLoader />
@@ -155,29 +168,9 @@ export function GameUI({ userId }: GameUIProps) {
     <div className="relative flex flex-col h-screen w-full bg-zinc-950">
       {NotificationComponent}
 
-      {/* 🔥 Демо-баннер (только для неавторизованных) */}
-      {isDemo && (
-        <div className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-600/90 to-pink-600/90 backdrop-blur-sm px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-white text-sm font-medium">🎮 Демо-режим</span>
-            <span className="text-white/60 text-xs">Прогресс не сохраняется</span>
-          </div>
-          <button
-            onClick={() => router.push('/login')}
-            className="bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
-          >
-            🔐 Сохранить прогресс
-          </button>
-        </div>
-      )}
+      {/* 🔥 Демо-баннер полностью удален! Теперь он в page.tsx */}
 
-      <GameAchievementNotifier
-        points={points}
-        isLegendary={isLegendary}
-        showNotification={showNotification}
-        notificationFeedback={notificationFeedback}
-        hapticFeedback={hapticFeedback}
-      />
+      {/* ❌ GameAchievementNotifier удален - теперь уведомления внутри GamePlayArea */}
 
       <GameScoreAnimation
         points={points}
@@ -208,6 +201,7 @@ export function GameUI({ userId }: GameUIProps) {
         isSuperhero={isSuperhero}
         isLegendary={isLegendary}
         comboCount={comboCount}
+        points={points} // 🔥 Передаем points для уведомлений
       />
 
       <GameBottomPanel

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { HapticStyle, NotificationType } from './useTelegram'
+import { THRESHOLDS } from '@/components/game/GameConfig'
 
 interface UseGameLogicProps {
   userId: string
@@ -31,6 +32,10 @@ export function useGameLogic({
   const prevScoreRef = useRef<number>(0)
   const comboTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMounted = useRef<boolean>(true)
+  const notificationsSent = useRef<{ superhero: boolean; legendary: boolean }>({
+    superhero: false,
+    legendary: false,
+  })
 
   const isDemo = userId === 'demo'
 
@@ -38,7 +43,6 @@ export function useGameLogic({
   const fetchUserData = useCallback(async () => {
     console.log('🔄 fetchUserData called for userId:', userId)
 
-    // 🔥 Если демо-режим — не ходим на сервер
     if (isDemo) {
       setPoints(0)
       setEnergy(1000)
@@ -85,7 +89,6 @@ export function useGameLogic({
     }
   }, [userId, isDemo])
 
-  // ✅ ВАЖНО: Вызываем fetchUserData при монтировании
   useEffect(() => {
     console.log('🔄 useGameLogic mounted, calling fetchUserData')
     fetchUserData()
@@ -93,7 +96,6 @@ export function useGameLogic({
 
   // Отправка кликов
   useEffect(() => {
-    // 🔥 В демо-режиме не отправляем клики на сервер
     if (isDemo) {
       console.log('ℹ️ Демо-режим: клики не отправляются на сервер')
       return
@@ -136,7 +138,10 @@ export function useGameLogic({
       setLastClickTime(now)
 
       if (energy <= 0) {
-        onNotification?.('warning', '😿 Энергия закончилась! Купи энергию в магазине')
+        onNotification?.(
+          'warning',
+          '😿 Энергия закончилась! Купи энергию в магазине',
+        )
         onNotificationFeedback?.('warning')
         return
       }
@@ -145,7 +150,6 @@ export function useGameLogic({
       setPoints(newPoints)
       setEnergy((prev) => Math.max(0, prev - 1))
 
-      // В демо-режиме не отправляем клики на сервер
       if (!isDemo) {
         clicksBuffer.current += 1
       }
@@ -159,28 +163,56 @@ export function useGameLogic({
 
       onHaptic?.('medium')
     },
-    [energy, lastClickTime, points, onNotification, onNotificationFeedback, onHaptic, isDemo]
+    [
+      energy,
+      lastClickTime,
+      points,
+      onNotification,
+      onNotificationFeedback,
+      onHaptic,
+      isDemo,
+    ],
   )
 
-  // Обновление уровня
+  // 🔥 Уведомления о достижениях (синхронизированы с THRESHOLDS)
   useEffect(() => {
-    const calculatedLevel = Math.floor(points / 500) + 1
-    setLevel(calculatedLevel)
-    setExp(points % 500)
-
-    if (points >= 50 && prevScoreRef.current < 50) {
+    // Проверяем супергероя
+    if (
+      points >= THRESHOLDS.SUPERHERO &&
+      !notificationsSent.current.superhero
+    ) {
+      notificationsSent.current.superhero = true
       onNotification?.('achievement', '🦸‍♂️ Супер-кот активирован!')
       onNotificationFeedback?.('success')
       onHaptic?.('heavy')
     }
-    if (points >= 1000 && prevScoreRef.current < 1000) {
+
+    // Проверяем легендарного
+    if (
+      points >= THRESHOLDS.LEGENDARY &&
+      !notificationsSent.current.legendary
+    ) {
+      notificationsSent.current.legendary = true
       onNotification?.('achievement', '👑 Легендарный кот!')
       onNotificationFeedback?.('success')
       onHaptic?.('heavy')
     }
 
+    // Обновляем уровень
+    const calculatedLevel = Math.floor(points / 500) + 1
+    setLevel(calculatedLevel)
+    setExp(points % 500)
+
     prevScoreRef.current = points
   }, [points, onNotification, onNotificationFeedback, onHaptic])
+
+  // Сброс уведомлений при загрузке новых данных
+  useEffect(() => {
+    notificationsSent.current = {
+      superhero: points >= THRESHOLDS.SUPERHERO,
+      legendary: points >= THRESHOLDS.LEGENDARY,
+    }
+  }, [points])
 
   // Очистка
   useEffect(() => {

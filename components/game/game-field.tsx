@@ -25,42 +25,52 @@ export function GameField({
 }: GameFieldProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isReady, setIsReady] = useState(false)
-  
+
   // 🔥 Анимация клика (конфетти и +10)
-  const [clickEffects, setClickEffects] = useState<{ 
-    id: string; 
-    x: number; 
-    y: number; 
-    type: 'tap' | 'confetti' 
-  }[]>([])
+  const [clickEffects, setClickEffects] = useState<
+    {
+      id: string
+      x: number
+      y: number
+      type: 'tap' | 'confetti'
+    }[]
+  >([])
 
   // 🔥 Обработка клика с анимацией
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (energy <= 0) return
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (energy <= 0) return
 
-    const rect = containerRef.current?.getBoundingClientRect()
-    if (!rect) return
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
 
-    const x = (e.clientX - rect.left) / rect.width
-    const y = 1 - (e.clientY - rect.top) / rect.height
+      const x = (e.clientX - rect.left) / rect.width
+      const y = 1 - (e.clientY - rect.top) / rect.height
 
-    // 🔥 Добавляем эффект клика (+10 и конфетти)
-    const id = `${Date.now()}-${Math.random()}`
-    setClickEffects(prev => [...prev, { id, x, y, type: 'tap' }])
-    
-    // 🔥 Конфетти через 50ms
-    setTimeout(() => {
-      setClickEffects(prev => [...prev, { id: `${id}-confetti`, x, y, type: 'confetti' }])
-    }, 50)
+      // 🔥 Добавляем эффект клика (+10 и конфетти)
+      const id = `${Date.now()}-${Math.random()}`
+      setClickEffects((prev) => [...prev, { id, x, y, type: 'tap' }])
 
-    // Удаляем эффекты через 1 секунду
-    setTimeout(() => {
-      setClickEffects(prev => prev.filter(e => e.id !== id && e.id !== `${id}-confetti`))
-    }, 1000)
+      // 🔥 Конфетти через 50ms
+      setTimeout(() => {
+        setClickEffects((prev) => [
+          ...prev,
+          { id: `${id}-confetti`, x, y, type: 'confetti' },
+        ])
+      }, 50)
 
-    // Вызываем onTap
-    onTap(x, y)
-  }, [energy, onTap])
+      // Удаляем эффекты через 1 секунду
+      setTimeout(() => {
+        setClickEffects((prev) =>
+          prev.filter((e) => e.id !== id && e.id !== `${id}-confetti`),
+        )
+      }, 1000)
+
+      // Вызываем onTap
+      onTap(x, y)
+    },
+    [energy, onTap],
+  )
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -90,7 +100,7 @@ export function GameField({
     container.appendChild(renderer.domElement)
 
     // Освещение
-    const hemiLight = new THREE.HemisphereLight(0x4444ff, 0x444422, 1.0)
+    const hemiLight = new THREE.HemisphereLight(0xff8844, 0x444422, 1.0)
     scene.add(hemiLight)
 
     const mainLight = new THREE.DirectionalLight(0xfff5e6, 2.5)
@@ -123,6 +133,11 @@ export function GameField({
     let targetRotationY = 0
     let currentRotationY = 0
 
+    // 🌀 Настройки автовращения
+    const AUTO_ROTATE_SPEED = 0.003
+    let isInteracting = false
+    let interactionTimeout: NodeJS.Timeout | null = null
+
     // Загрузка модели
     const loader = new GLTFLoader()
     loader.load(
@@ -134,7 +149,9 @@ export function GameField({
         const size = box.getSize(new THREE.Vector3())
 
         model.position.sub(center)
-        const targetSize = 2.2
+
+        // 🔥 Размер кота 1.5
+        const targetSize = 1.5
         const maxDim = Math.max(size.x, size.y, size.z)
         const scale = maxDim > 0 ? targetSize / maxDim : 1
         model.scale.set(scale, scale, scale)
@@ -147,24 +164,33 @@ export function GameField({
       (error) => {
         console.error('❌ Ошибка загрузки модели:', error)
         setIsReady(true)
-      }
+      },
     )
 
-    // 🔥 Анимация с плавным поворотом к клику
+    // 🔥 Анимация с автовращением и реакцией на клики
     const animate = () => {
+      // 🌀 Автовращение (медленное вращение как в космосе)
+      if (!isInteracting) {
+        targetRotationY += AUTO_ROTATE_SPEED
+      }
+
       // Плавное вращение к цели
       const diff = targetRotationY - currentRotationY
+      const smoothness = isInteracting ? 0.08 : 0.05
       if (Math.abs(diff) > 0.001) {
-        currentRotationY += diff * 0.08 // Плавность поворота
+        currentRotationY += diff * smoothness
       } else {
         currentRotationY = targetRotationY
       }
-      
+
       modelGroup.rotation.y = currentRotationY
-      
-      // Лёгкое покачивание
-      modelGroup.position.y = 0.1 + Math.sin(Date.now() * 0.001) * 0.02
-      
+
+      // 🚀 Космическое покачивание (невесомость)
+      const time = Date.now() * 0.001
+      modelGroup.position.y = 0.1 + Math.sin(time) * 0.02
+      modelGroup.position.x = Math.sin(time * 0.5) * 0.03
+      modelGroup.rotation.z = Math.sin(time * 0.3) * 0.005
+
       renderer.render(scene, camera)
       requestAnimationFrame(animate)
     }
@@ -172,9 +198,24 @@ export function GameField({
 
     // 🔥 Обновление цели поворота при клике
     const handleClick3D = (x: number, y: number) => {
+      // Включаем интерактивный режим
+      isInteracting = true
+
+      // Отменяем предыдущий таймаут
+      if (interactionTimeout) {
+        clearTimeout(interactionTimeout)
+      }
+
       // Преобразуем координаты клика в угол
       const angle = Math.atan2(x - 0.5, y - 0.5)
       targetRotationY = angle
+
+      // 🕐 Через 2.5 секунды возвращаем автовращение
+      interactionTimeout = setTimeout(() => {
+        isInteracting = false
+        // Плавно переходим к автовращению
+        targetRotationY = currentRotationY
+      }, 2500)
     }
 
     // Слушаем клики через DOM
@@ -215,17 +256,19 @@ export function GameField({
     >
       {/* Аура */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-        <div className={`w-72 h-72 rounded-full blur-3xl transition-all duration-1000 ${
-          isLegendary 
-            ? 'bg-yellow-400/30 animate-pulse' 
-            : isSuperhero 
-              ? 'bg-amber-400/25 animate-pulse' 
-              : 'bg-purple-500/20'
-        }`} />
+        <div
+          className={`w-72 h-72 rounded-full blur-3xl transition-all duration-1000 ${
+            isLegendary
+              ? 'bg-yellow-400/30 animate-pulse'
+              : isSuperhero
+                ? 'bg-amber-400/25 animate-pulse'
+                : 'bg-purple-500/20'
+          }`}
+        />
       </div>
 
       {/* 🔥 Эффекты клика (+10 и конфетти) */}
-      {clickEffects.map(effect => (
+      {clickEffects.map((effect) => (
         <div
           key={effect.id}
           className="absolute pointer-events-none z-50"

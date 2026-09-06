@@ -26,28 +26,38 @@ export default function HomePage() {
     )
   }
 
-  // 🔥 Всегда показываем игру, даже без авторизации
-  // Просто передаём userId = 'demo' для демо-режима
   const userId = user?.id || 'demo'
 
   return (
     <div className="w-full h-screen overflow-hidden bg-zinc-950 relative">
-      {/* Демо-баннер (только для неавторизованных) */}
+      {/* 🔥 Компактный демо-индикатор */}
       {!user && (
-        <div className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-600/90 to-pink-600/90 backdrop-blur-sm px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-white text-sm font-medium">
-              🎮 Демо-режим
-            </span>
-            <span className="text-white/60 text-xs">
-              Прогресс не сохраняется
-            </span>
-          </div>
+        <div 
+          className="absolute top-3 right-3 z-50 flex items-center gap-2 
+                     bg-purple-600/80 backdrop-blur-sm 
+                     border border-purple-400/30 
+                     px-3 py-1.5 rounded-full 
+                     shadow-lg shadow-purple-500/20
+                     animate-pulse"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+          </span>
+          <span className="text-white text-xs font-medium">
+            🎮 ДЕМО
+          </span>
           <button
-            onClick={() => router.push('/login')}
-            className="bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
+            onClick={(e) => {
+              e.stopPropagation()
+              router.push('/login')
+            }}
+            className="text-white/70 hover:text-white text-[10px] font-medium 
+                       bg-white/10 hover:bg-white/20 
+                       px-2 py-0.5 rounded-full transition-colors
+                       border border-white/10"
           >
-            🔐 Войти
+            Войти
           </button>
         </div>
       )}
