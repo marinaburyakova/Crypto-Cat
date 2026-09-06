@@ -9,10 +9,18 @@ interface StarsPaymentButtonProps {
   itemSku: string
   itemName: string
   onSuccess?: () => void
-  onError?: (error: string) => void // ✅ Добавлен обработчик ошибок
+  onError?: (error: string) => void
   className?: string
-  disabled?: boolean // ✅ Добавлен пропс disabled
-  children?: React.ReactNode // ✅ Поддержка кастомного контента
+  disabled?: boolean
+  children?: React.ReactNode
+}
+
+// 🔥 Маппинг: цена в Stars → количество энергии
+const ENERGY_BY_PRICE: Record<number, number> = {
+  50: 100,
+  200: 500,
+  350: 1000,
+  1500: 5000,
 }
 
 export function StarsPaymentButton({
@@ -30,12 +38,10 @@ export function StarsPaymentButton({
   const [error, setError] = useState<string | null>(null)
 
   const handlePurchase = async () => {
-    // Сброс ошибки
     setError(null)
     setIsLoading(true)
 
     try {
-      // ✅ Валидация входных данных
       if (!userId) {
         throw new Error('ID пользователя не указан')
       }
@@ -48,7 +54,12 @@ export function StarsPaymentButton({
         throw new Error('Некорректная цена товара')
       }
 
-      // ✅ Используем правильный API эндпоинт
+      // 🔥 Получаем количество энергии по цене
+      const energyAmount = ENERGY_BY_PRICE[itemPriceStars]
+      if (!energyAmount) {
+        throw new Error(`Неизвестная цена: ${itemPriceStars} Stars`)
+      }
+
       const response = await fetch('/api/payments/energy/buy-stars', {
         method: 'POST',
         headers: {
@@ -56,7 +67,7 @@ export function StarsPaymentButton({
         },
         body: JSON.stringify({
           userId: userId,
-          amount: itemPriceStars,
+          amount: energyAmount, // ← Отправляем количество энергии
         }),
       })
 
@@ -66,12 +77,10 @@ export function StarsPaymentButton({
         throw new Error(data.error || 'Ошибка создания платежа')
       }
 
-      // ✅ Проверяем наличие ссылки на инвойс
       if (!data.invoiceLink) {
         throw new Error('Ссылка на оплату не получена')
       }
 
-      // ✅ Открываем инвойс в новом окне
       const invoiceWindow = window.open(data.invoiceLink, '_blank')
 
       if (!invoiceWindow) {
@@ -80,10 +89,7 @@ export function StarsPaymentButton({
         )
       }
 
-      // ✅ Вызываем onSuccess при успешном создании инвойса
       onSuccess?.()
-
-      // ✅ Начинаем проверку статуса платежа
       startPaymentStatusCheck(data.payload, data.transactionId)
     } catch (error) {
       const errorMessage =
@@ -91,11 +97,9 @@ export function StarsPaymentButton({
       console.error('❌ Purchase error:', error)
       setError(errorMessage)
 
-      // ✅ Вызываем onError если передан
       if (onError) {
         onError(errorMessage)
       } else {
-        // ✅ Или показываем уведомление
         alert(`❌ ${errorMessage}`)
       }
     } finally {
@@ -103,10 +107,9 @@ export function StarsPaymentButton({
     }
   }
 
-  // ✅ Функция проверки статуса платежа
   const startPaymentStatusCheck = (payload: string, transactionId?: string) => {
     let attempts = 0
-    const maxAttempts = 60 // Максимум 60 попыток (5 минут)
+    const maxAttempts = 60
     const intervalId = setInterval(async () => {
       attempts++
 
@@ -120,19 +123,14 @@ export function StarsPaymentButton({
           clearInterval(intervalId)
           console.log('✅ Payment confirmed!')
 
-          // ✅ Показываем уведомление об успехе
           onSuccess?.()
-
-          // ✅ Можно добавить уведомление пользователю
           alert('✅ Платеж успешно подтвержден!')
 
-          // ✅ Обновляем страницу через 1 секунду
           setTimeout(() => {
             window.location.reload()
           }, 1000)
         }
 
-        // Если статус FAILED или REFUNDED
         if (data.status === 'FAILED' || data.status === 'REFUNDED') {
           clearInterval(intervalId)
           console.warn('⚠️ Payment failed or refunded')
@@ -147,7 +145,6 @@ export function StarsPaymentButton({
           }
         }
 
-        // Если превышено количество попыток
         if (attempts >= maxAttempts) {
           clearInterval(intervalId)
           console.warn('⚠️ Payment status check timeout')
@@ -159,7 +156,6 @@ export function StarsPaymentButton({
       } catch (error) {
         console.error('❌ Status check error:', error)
 
-        // Если ошибка при проверке, продолжаем пытаться
         if (attempts >= maxAttempts) {
           clearInterval(intervalId)
           if (onError) {
@@ -167,13 +163,11 @@ export function StarsPaymentButton({
           }
         }
       }
-    }, 5000) // Проверка каждые 5 секунд
+    }, 5000)
 
-    // ✅ Возвращаем функцию для очистки интервала
     return () => clearInterval(intervalId)
   }
 
-  // ✅ Компонент состояния загрузки
   const LoadingContent = () => (
     <span className="flex items-center gap-2">
       <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
@@ -181,7 +175,6 @@ export function StarsPaymentButton({
     </span>
   )
 
-  // ✅ Компонент ошибки
   const ErrorContent = () => (
     <span className="flex items-center gap-2 text-red-300">
       <span className="text-sm">⚠️</span>
@@ -226,14 +219,12 @@ export function StarsPaymentButton({
         )}
       </button>
 
-      {/* ✅ Отображение ошибки под кнопкой */}
       {error && !onError && (
         <div className="mt-2 text-xs text-red-400 text-center animate-fadeIn">
           ❌ {error}
         </div>
       )}
 
-      {/* ✅ Индикатор статуса проверки */}
       {isLoading && (
         <div className="mt-2 text-[10px] text-slate-500 text-center animate-pulse">
           ⌛ Ожидание подтверждения платежа...
@@ -243,7 +234,6 @@ export function StarsPaymentButton({
   )
 }
 
-// ✅ Добавляем стили для анимации
 const styles = `
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-5px); }
