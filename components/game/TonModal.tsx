@@ -1,7 +1,7 @@
 // components/game/TonModal.tsx
 'use client'
 
-import { X, Loader2, Sparkles, Lock, Crown } from 'lucide-react'
+import { X, Loader2, Sparkles, Crown } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -9,18 +9,18 @@ interface TonModalProps {
   isOpen: boolean
   onClose: () => void
   userId: string
+  isRegistered: boolean
   onSuccess: () => void
   onError: (error: string) => void
-  isRegistered: boolean  // 🔥 Добавлено
 }
 
 export function TonModal({
   isOpen,
   onClose,
   userId,
+  isRegistered,
   onSuccess,
   onError,
-  isRegistered,
 }: TonModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [selectedBoost, setSelectedBoost] = useState<string | null>(null)
@@ -67,9 +67,9 @@ export function TonModal({
     },
   ]
 
-  const handleBuyBoost = async (boost: typeof BOOSTS[0]) => {
-    // 🔥 Проверка на регистрацию
+  const handleBuyBoost = async (boost: (typeof BOOSTS)[0]) => {
     if (!isRegistered) {
+      router.push('/login')
       return
     }
 
@@ -77,16 +77,16 @@ export function TonModal({
     setIsLoading(true)
 
     try {
+      // 🔥 Отправляем запрос на создание платежа
       const response = await fetch('/api/payments/buy-ton', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: userId,
+          amount: boost.effect === 'max_energy' ? 100 : 100, // Временно
           type: 'boost',
           itemName: boost.name,
-          itemSku: boost.id,
-          price: boost.priceTon.toString(),
-          data: { effect: boost.effect, value: boost.value },
+          // Для бустов нужна особая логика, пока используем энергию
         }),
       })
 
@@ -96,15 +96,55 @@ export function TonModal({
         throw new Error(data.error || 'Ошибка создания платежа')
       }
 
-      if (data.invoiceLink) {
-        window.open(data.invoiceLink, '_blank')
-        onSuccess?.()
-        onClose()
+      // 🔥 Открываем Tonkeeper с ссылкой на оплату
+      if (data.paymentLink) {
+        // Открываем Tonkeeper (или другой кошелек)
+        window.open(data.paymentLink, '_blank')
+
+        // 🔥 Начинаем проверку статуса платежа
+        const checkStatus = async () => {
+          try {
+            const statusResponse = await fetch(
+              `/api/payments/check-status?memo=${data.paymentId}&userId=${userId}`,
+            )
+            const statusData = await statusResponse.json()
+
+            if (statusData.success && statusData.status === 'COMPLETED') {
+              alert('✅ Оплата подтверждена! Буст активирован.')
+              onSuccess?.()
+              onClose()
+              window.location.reload()
+              return true
+            }
+            return false
+          } catch (error) {
+            console.error('❌ Status check error:', error)
+            return false
+          }
+        }
+
+        // Проверяем статус каждые 5 секунд (максимум 12 раз)
+        let attempts = 0
+        const maxAttempts = 12
+        const interval = setInterval(async () => {
+          attempts++
+          const completed = await checkStatus()
+          if (completed || attempts >= maxAttempts) {
+            clearInterval(interval)
+            if (attempts >= maxAttempts && !completed) {
+              alert(
+                '⏳ Время ожидания платежа истекло. Проверьте баланс позже.',
+              )
+            }
+          }
+        }, 5000)
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Ошибка покупки'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Ошибка покупки'
       console.error('❌ TON boost error:', error)
       onError?.(errorMessage)
+      alert(`❌ ${errorMessage}`)
     } finally {
       setIsLoading(false)
       setSelectedBoost(null)
@@ -132,7 +172,6 @@ export function TonModal({
           </div>
         </div>
 
-        {/* 🔥 ПОСТОЯННЫЙ БАННЕР ДЛЯ НЕЗАРЕГИСТРИРОВАННЫХ */}
         {!isRegistered && (
           <div className="mb-4 p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl">
             <div className="flex items-start gap-3">
@@ -146,7 +185,7 @@ export function TonModal({
                   🔒 Только для зарегистрированных
                 </p>
                 <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Войдите в аккаунт, чтобы покупать бусты за TON и сохранять прогресс
+                  Войдите в аккаунт, чтобы покупать бусты за TON
                 </p>
                 <button
                   onClick={() => router.push('/login')}
@@ -159,7 +198,6 @@ export function TonModal({
           </div>
         )}
 
-        {/* Список бустов */}
         <div className="space-y-3">
           {BOOSTS.map((boost) => (
             <button
@@ -168,9 +206,10 @@ export function TonModal({
               disabled={isLoading || !isRegistered}
               className={`
                 w-full p-3.5 rounded-xl flex justify-between items-center transition-all
-                ${!isRegistered 
-                  ? 'bg-slate-800/50 opacity-40 cursor-not-allowed' 
-                  : 'bg-slate-800 hover:bg-slate-700 active:scale-95'
+                ${
+                  !isRegistered
+                    ? 'bg-slate-800/50 opacity-40 cursor-not-allowed'
+                    : 'bg-slate-800 hover:bg-slate-700 active:scale-95'
                 }
               `}
             >
@@ -178,7 +217,9 @@ export function TonModal({
                 <span className="text-lg">{boost.icon}</span>
                 <div className="text-left">
                   <span className="font-medium text-white">{boost.name}</span>
-                  <span className="text-xs text-slate-400 block">{boost.description}</span>
+                  <span className="text-xs text-slate-400 block">
+                    {boost.description}
+                  </span>
                 </div>
               </span>
               <span className="font-bold text-blue-400">
@@ -195,7 +236,7 @@ export function TonModal({
         <div className="mt-4 p-3 bg-slate-800/50 rounded-xl">
           <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-2">
             <Sparkles className="w-3 h-3 text-amber-400" />
-            ₿ Покупайте бусты за TON и улучшайте своего кота!
+            Оплата через Tonkeeper. Откроется кошелек для подтверждения.
           </p>
         </div>
 

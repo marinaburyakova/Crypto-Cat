@@ -5,18 +5,19 @@ import { useState } from 'react'
 import { X, Sparkles, Loader2, Crown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+// 🔥 ВРЕМЕННЫЕ ЦЕНЫ ДЛЯ ТЕСТА (5, 10, 20, 50 Stars)
 const STARS_PRICES = {
-  100: 50,
-  500: 200,
-  1000: 350,
-  5000: 1500,
+  100: 5,    // 5 Stars за 100 энергии
+  500: 10,   // 10 Stars за 500 энергии
+  1000: 20,  // 20 Stars за 1000 энергии
+  5000: 50,  // 50 Stars за 5000 энергии
 } as const
 
 const TON_PRICES = {
-  100: 0.5,
-  500: 2.0,
-  1000: 3.5,
-  5000: 15.0,
+  100: 0.05,
+  500: 0.10,
+  1000: 0.20,
+  5000: 0.50,
 } as const
 
 type EnergyAmount = keyof typeof STARS_PRICES
@@ -31,7 +32,7 @@ interface EnergyModalProps {
   onBuyStars: (amount: EnergyAmount) => Promise<void>
   onBuyTon: (amount: EnergyAmount) => Promise<void>
   isBuying: boolean
-  isRegistered: boolean  // 🔥 Добавлено
+  isRegistered: boolean
 }
 
 export function EnergyModal({ 
@@ -57,7 +58,6 @@ export function EnergyModal({
   const formatTonPrice = (price: number) => price.toFixed(1)
 
   const handleBuy = async (amount: EnergyAmount) => {
-    // 🔥 Проверка на регистрацию для Stars
     if (activeTab === 'stars' && !isRegistered) {
       return
     }
@@ -104,7 +104,6 @@ export function EnergyModal({
           </div>
         </div>
 
-        {/* 🔥 Баннер для незарегистрированных (только для Stars) */}
         {!isRegistered && (
           <div className="mb-4 p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl">
             <div className="flex items-start gap-3">
@@ -118,7 +117,7 @@ export function EnergyModal({
                   🔒 Только для зарегистрированных
                 </p>
                 <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Войдите в аккаунт, чтобы покупать энергию за Stars и сохранять прогресс
+                  Войдите в аккаунт, чтобы покупать энергию за Stars
                 </p>
                 <button
                   onClick={() => router.push('/login')}
@@ -131,7 +130,6 @@ export function EnergyModal({
           </div>
         )}
 
-        {/* 🔥 Баннер, если энергия полна */}
         {isEnergyFull && isRegistered && (
           <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
             <div className="flex items-center gap-2">

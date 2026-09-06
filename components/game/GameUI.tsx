@@ -61,6 +61,27 @@ export function GameUI({ userId }: GameUIProps) {
     setUserStars(points)
   }, [points])
 
+  // 🔥 ВРЕМЕННЫЕ ЦЕНЫ ДЛЯ ТЕСТА (5, 10, 20, 50 Stars)
+  const getStarsPrice = (amount: number): number => {
+    const prices: Record<number, number> = {
+      100: 5,    // ← 5 Stars за 100 энергии
+      500: 10,   // ← 10 Stars за 500 энергии
+      1000: 20,  // ← 20 Stars за 1000 энергии
+      5000: 50,  // ← 50 Stars за 5000 энергии
+    }
+    return prices[amount] || 0
+  }
+
+  const getTonPrice = (amount: number): number => {
+    const prices: Record<number, number> = {
+      100: 0.05,
+      500: 0.10,
+      1000: 0.20,
+      5000: 0.50,
+    }
+    return prices[amount] || 0
+  }
+
   // 🔥 НОВАЯ ФУНКЦИЯ покупки за Stars через универсальный эндпоинт
   const handleBuyEnergyStars = useCallback(
     async (amount: number) => {
@@ -81,6 +102,8 @@ export function GameUI({ userId }: GameUIProps) {
 
       setIsBuyingEnergy(true)
       try {
+        const price = getStarsPrice(amount)
+        
         // 🔥 Используем НОВЫЙ универсальный эндпоинт
         const response = await fetch('/api/payments/buy-stars', {
           method: 'POST',
@@ -90,7 +113,7 @@ export function GameUI({ userId }: GameUIProps) {
             type: 'energy',
             itemName: `${amount} энергии`,
             itemSku: `energy_${amount}`,
-            price: getStarsPrice(amount),
+            price: price,
             data: { amount: amount },
           }),
         })
@@ -161,21 +184,12 @@ export function GameUI({ userId }: GameUIProps) {
     [userId, isDemo, energy, maxEnergy, showNotification, fetchUserData],
   )
 
-  // 🔥 Вспомогательная функция для получения цены в Stars
-  const getStarsPrice = (amount: number): number => {
-    const prices: Record<number, number> = {
-      100: 50,
-      500: 200,
-      1000: 350,
-      5000: 1500,
-    }
-    return prices[amount] || 0
-  }
-
   const handleBuyEnergyTon = useCallback(
     async (amount: number) => {
       setIsBuyingEnergy(true)
       try {
+        const price = getTonPrice(amount)
+        
         // 🔥 Используем НОВЫЙ универсальный эндпоинт для TON
         const response = await fetch('/api/payments/buy-ton', {
           method: 'POST',
@@ -185,7 +199,7 @@ export function GameUI({ userId }: GameUIProps) {
             type: 'energy',
             itemName: `${amount} энергии`,
             itemSku: `energy_${amount}`,
-            price: getTonPrice(amount).toString(),
+            price: price.toString(),
             data: { amount: amount },
           }),
         })
@@ -211,17 +225,6 @@ export function GameUI({ userId }: GameUIProps) {
     },
     [userId, showNotification],
   )
-
-  // 🔥 Вспомогательная функция для получения цены в TON
-  const getTonPrice = (amount: number): number => {
-    const prices: Record<number, number> = {
-      100: 0.5,
-      500: 2.0,
-      1000: 3.5,
-      5000: 15.0,
-    }
-    return prices[amount] || 0
-  }
 
   const handleBuyBoost = useCallback(() => {
     setIsTonModalOpen(true)

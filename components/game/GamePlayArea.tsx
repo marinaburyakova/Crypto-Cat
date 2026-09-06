@@ -2,7 +2,6 @@
 'use client'
 
 import { GameField } from './game-field'
-import { GameCatNotification } from './GameCatNotification'
 import { useState, useEffect } from 'react'
 
 interface GamePlayAreaProps {
@@ -14,7 +13,7 @@ interface GamePlayAreaProps {
   isSuperhero: boolean
   isLegendary?: boolean
   comboCount: number
-  points: number  // ✅ Добавлено
+  points: number
 }
 
 export function GamePlayArea({
@@ -26,33 +25,51 @@ export function GamePlayArea({
   isSuperhero,
   isLegendary = false,
   comboCount,
-  points,  // ✅ Добавлено
+  points,
 }: GamePlayAreaProps) {
   const [key, setKey] = useState(0)
+  const [hasClicked, setHasClicked] = useState(false)
 
   useEffect(() => {
-    setKey(prev => prev + 1)
+    setKey((prev) => prev + 1)
   }, [catModel])
+
+  const handleTapWithHint = (x: number, y: number) => {
+    if (!hasClicked) {
+      setHasClicked(true)
+    }
+    onTap(x, y)
+  }
+
+  const shouldShowHint = !hasClicked && points < 10
 
   return (
     <div className="flex-1 relative overflow-hidden">
-      {/* 🔥 Красивые уведомления о достижениях */}
-      <GameCatNotification
-        points={points} // передавайте реальные points из GameUI
-        isSuperhero={isSuperhero}
-        isLegendary={isLegendary}
-      />
-
       <GameField
         key={key}
         emotion={emotion}
         energy={energy}
-        onTap={onTap}
+        onTap={handleTapWithHint}
         catModel={catModel}
         catInfo={catInfo}
         isSuperhero={isSuperhero}
         isLegendary={isLegendary}
       />
+
+      {/* 🔥 Компактная полупрозрачная подсказка */}
+      {shouldShowHint && (
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30">
+          <div className="bg-black/30 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/5 shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="animate-bounce-slow text-base">👆</span>
+              <span className="text-white font-medium text-xs">
+                Нажми на кота
+              </span>
+              <span className="text-white/30 text-[8px]">⭐</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Комбо-счетчик */}
       {comboCount > 1 && (
