@@ -28,10 +28,7 @@ const registerSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     console.log('📝 [SERVER] Регистрация начата')
-    console.log('📝 [SERVER] Method:', request.method)
-    console.log('📝 [SERVER] Headers:', Object.fromEntries(request.headers))
 
-    // 1️⃣ Получаем тело запроса
     let body
     try {
       body = await request.json()
@@ -45,7 +42,6 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 [SERVER] Получен body:', JSON.stringify(body))
 
-    // 2️⃣ Валидация
     let validated
     try {
       validated = registerSchema.parse(body)
@@ -65,7 +61,6 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ [SERVER] Валидация пройдена для:', validated.login)
 
-    // 3️⃣ Проверка существующего пользователя
     let existingUser
     try {
       existingUser = await prisma.user.findUnique({
@@ -90,7 +85,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 4️⃣ Хеширование пароля
     let hashedPassword
     try {
       const saltRounds = 12
@@ -104,7 +98,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5️⃣ Создание пользователя
     let user
     try {
       user = await prisma.user.create({
@@ -118,6 +111,11 @@ export async function POST(request: NextRequest) {
           level: 1,
           exp: 0,
           skin: 'default',
+          passiveRate: 0, // ✅ ДОБАВЛЕНО
+          unclaimedPoints: 0, // ✅ ДОБАВЛЕНО
+          totalSpent: 0, // ✅ ДОБАВЛЕНО
+          createdAt: new Date(), // ✅ ДОБАВЛЕНО
+          updatedAt: new Date(), // ✅ ДОБАВЛЕНО
         },
         select: {
           id: true,
