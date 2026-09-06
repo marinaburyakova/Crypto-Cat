@@ -2,9 +2,9 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Sparkles, Loader2 } from 'lucide-react'
+import { X, Sparkles, Loader2, Crown } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
-// Цены в Stars
 const STARS_PRICES = {
   100: 50,
   500: 200,
@@ -12,7 +12,6 @@ const STARS_PRICES = {
   5000: 1500,
 } as const
 
-// Цены в TON
 const TON_PRICES = {
   100: 0.5,
   500: 2.0,
@@ -28,9 +27,11 @@ interface EnergyModalProps {
   currentEnergy: number
   maxEnergy: number
   userStars: number
+  userId: string
   onBuyStars: (amount: EnergyAmount) => Promise<void>
   onBuyTon: (amount: EnergyAmount) => Promise<void>
   isBuying: boolean
+  isRegistered: boolean  // 🔥 Добавлено
 }
 
 export function EnergyModal({ 
@@ -39,19 +40,43 @@ export function EnergyModal({
   currentEnergy, 
   maxEnergy,
   userStars,
+  userId,
   onBuyStars,
   onBuyTon,
-  isBuying 
+  isBuying,
+  isRegistered,
 }: EnergyModalProps) {
   const [activeTab, setActiveTab] = useState<'stars' | 'ton'>('stars')
+  const [loadingAmount, setLoadingAmount] = useState<EnergyAmount | null>(null)
+  const router = useRouter()
 
   if (!isOpen) return null
 
   const isEnergyFull = currentEnergy >= maxEnergy
-
   const canAffordStars = (price: number) => userStars >= price
-
   const formatTonPrice = (price: number) => price.toFixed(1)
+
+  const handleBuy = async (amount: EnergyAmount) => {
+    // 🔥 Проверка на регистрацию для Stars
+    if (activeTab === 'stars' && !isRegistered) {
+      return
+    }
+
+    if (isEnergyFull) {
+      return
+    }
+
+    setLoadingAmount(amount)
+    try {
+      if (activeTab === 'stars') {
+        await onBuyStars(amount)
+      } else {
+        await onBuyTon(amount)
+      }
+    } finally {
+      setLoadingAmount(null)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
@@ -79,7 +104,46 @@ export function EnergyModal({
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* 🔥 Баннер для незарегистрированных (только для Stars) */}
+        {!isRegistered && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-amber-400">
+                  🔒 Только для зарегистрированных
+                </p>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Войдите в аккаунт, чтобы покупать энергию за Stars и сохранять прогресс
+                </p>
+                <button
+                  onClick={() => router.push('/login')}
+                  className="mt-3 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold rounded-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg shadow-amber-500/20"
+                >
+                  🔐 Войти
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 Баннер, если энергия полна */}
+        {isEnergyFull && isRegistered && (
+          <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚡</span>
+              <div>
+                <p className="text-xs font-medium text-green-400">Энергия полна!</p>
+                <p className="text-[10px] text-slate-400">Потратьте энергию перед покупкой</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 mb-4 bg-slate-800/50 rounded-xl p-1">
           <button
             onClick={() => setActiveTab('stars')}
@@ -103,24 +167,18 @@ export function EnergyModal({
           </button>
         </div>
 
-        {/* Список цен */}
         <div className="space-y-2.5">
           {Object.entries(activeTab === 'stars' ? STARS_PRICES : TON_PRICES).map(([amount, price]) => {
-            const numAmount = parseInt(amount)
+            const numAmount = parseInt(amount) as EnergyAmount
             const isMaxed = isEnergyFull
             const hasEnough = activeTab === 'stars' ? canAffordStars(price) : true
-            const isDisabled = isBuying || isMaxed || !hasEnough
+            const isStarsLocked = activeTab === 'stars' && !isRegistered
+            const isDisabled = isBuying || loadingAmount === numAmount || isMaxed || !hasEnough || isStarsLocked
 
             return (
               <button
                 key={amount}
-                onClick={() => {
-                  if (activeTab === 'stars') {
-                    onBuyStars(numAmount as EnergyAmount)
-                  } else {
-                    onBuyTon(numAmount as EnergyAmount)
-                  }
-                }}
+                onClick={() => handleBuy(numAmount)}
                 disabled={isDisabled}
                 className={`w-full p-3.5 rounded-xl flex justify-between items-center transition-all ${
                   isDisabled
@@ -134,29 +192,37 @@ export function EnergyModal({
                     <span className="font-medium text-white">{amount}</span>
                     <span className="text-xs text-slate-500 block">
                       {isMaxed 
-                        ? '❌ Максимум' 
+                        ? '✅ Максимум' 
                         : !hasEnough && activeTab === 'stars' 
-                          ? '❌ Не хватает ⭐' 
-                          : ''}
+                          ? '❌ Не хватает ⭐'
+                          : isStarsLocked
+                            ? '🔒 Только для зарегистрированных'
+                            : ''}
                     </span>
                   </div>
                 </span>
                 <span className={`font-bold flex items-center gap-1 ${
                   activeTab === 'stars' ? 'text-yellow-400' : 'text-blue-400'
                 }`}>
-                  {activeTab === 'stars' ? `${price} ⭐` : `${formatTonPrice(price)} ₿`}
+                  {loadingAmount === numAmount ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : activeTab === 'stars' ? (
+                    `${price} ⭐`
+                  ) : (
+                    `${formatTonPrice(price)} ₿`
+                  )}
                 </span>
               </button>
             )
           })}
         </div>
 
-        <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-          <p className="text-[10px] text-amber-400 text-center flex items-center justify-center gap-2">
-            <Sparkles className="w-3 h-3" />
+        <div className="mt-4 p-3 bg-slate-800/50 rounded-xl">
+          <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-2">
+            <Sparkles className="w-3 h-3 text-amber-400" />
             {activeTab === 'stars' 
-              ? 'Покупайте энергию за Stars и тапайте без остановки!' 
-              : 'Покупайте энергию за TON и получайте +20% бонусных очков!'}
+              ? '⭐ Покупайте энергию за реальные Stars из Telegram!' 
+              : '₿ Покупайте энергию за TON!'}
           </p>
         </div>
 

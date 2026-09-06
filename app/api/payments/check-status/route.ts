@@ -2,35 +2,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams
-    const payload = searchParams.get('payload')
+    const searchParams = request.nextUrl.searchParams
+    const memo = searchParams.get('memo')
     const userId = searchParams.get('userId')
 
-    if (!payload || !userId) {
+    if (!memo || !userId) {
       return NextResponse.json(
-        { error: 'Missing payload or userId' },
+        { error: 'Missing required fields: memo, userId' },
         { status: 400 }
       )
     }
 
+    // 🔥 Ищем транзакцию по payload
     const transaction = await prisma.transaction.findFirst({
       where: {
-        payload,
-        userId,
-      },
-      select: {
-        id: true,
-        status: true,
-        amount: true,
-        currency: true,
-        payload: true,
-        sku: true,
-        itemName: true,
-        applied: true,
-        createdAt: true,
-        completedAt: true,
+        payload: memo,
+        userId: userId,
       },
     })
 
@@ -41,27 +30,20 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // ✅ Проверяем статус с учетом applied
-    let status = transaction.status
-    if (transaction.applied && status !== 'SUCCESS' && status !== 'COMPLETED') {
-      status = 'COMPLETED'
-    }
-
     return NextResponse.json({
       success: true,
-      status,
+      status: transaction.status,
       transaction: {
         id: transaction.id,
         amount: transaction.amount,
         currency: transaction.currency,
-        applied: transaction.applied,
+        status: transaction.status,
         createdAt: transaction.createdAt,
         completedAt: transaction.completedAt,
       },
     })
-
   } catch (error) {
-    console.error('❌ Status check error:', error)
+    console.error('❌ Check status error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

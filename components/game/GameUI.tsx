@@ -8,7 +8,6 @@ import { GameStats } from './GameStats'
 import { GamePlayArea } from './GamePlayArea'
 import { GameBottomPanel } from './GameBottomPanel'
 import { GameModals } from './GameModals'
-// import { GameAchievementNotifier } from './GameAchievementNotifier' // ❌ УДАЛЕН - больше не нужен
 import { GameScoreAnimation } from './GameScoreAnimation'
 import { useGameLogic } from '@/hooks/useGameLogic'
 import { useTelegram } from '@/hooks/useTelegram'
@@ -25,6 +24,7 @@ export function GameUI({ userId }: GameUIProps) {
   const { showNotification, NotificationComponent } = useNotification()
 
   const isDemo = userId === 'demo'
+  const isRegistered = userId !== 'demo' && userId !== ''
 
   const {
     points,
@@ -47,7 +47,6 @@ export function GameUI({ userId }: GameUIProps) {
     onNotificationFeedback: notificationFeedback,
   })
 
-  // Остальные состояния
   const [showEnergyModal, setShowEnergyModal] = useState(false)
   const [isBuyingEnergy, setIsBuyingEnergy] = useState(false)
   const [isTonModalOpen, setIsTonModalOpen] = useState(false)
@@ -55,7 +54,6 @@ export function GameUI({ userId }: GameUIProps) {
   const [userStars, setUserStars] = useState(0)
 
   const catInfo = useMemo(() => getCatInfo(points), [points])
-  // 🔥 Используем единые пороги из GameConfig
   const isSuperhero = points >= THRESHOLDS.SUPERHERO
   const isLegendary = points >= THRESHOLDS.LEGENDARY
 
@@ -63,45 +61,95 @@ export function GameUI({ userId }: GameUIProps) {
     setUserStars(points)
   }, [points])
 
+  // 🔥 НОВАЯ ФУНКЦИЯ покупки за Stars через универсальный эндпоинт
   const handleBuyEnergyStars = useCallback(
     async (amount: number) => {
+      // Проверяем, не демо-режим ли
+      if (isDemo) {
+        showNotification(
+          'warning',
+          '⚠️ В демо-режиме покупка за Stars недоступна',
+        )
+        return
+      }
+
+      // Проверяем, не полна ли энергия
+      if (energy >= maxEnergy) {
+        showNotification('warning', '⚡ Энергия полна!')
+        return
+      }
+
       setIsBuyingEnergy(true)
       try {
-        const response = await fetch('/api/payments/energy/buy-stars', {
+        // 🔥 Используем НОВЫЙ универсальный эндпоинт
+        const response = await fetch('/api/payments/buy-stars', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, amount }),
+          body: JSON.stringify({
+            userId: userId,
+            type: 'energy',
+            itemName: `${amount} энергии`,
+            itemSku: `energy_${amount}`,
+            price: getStarsPrice(amount),
+            data: { amount: amount },
+          }),
         })
 
         const data = await response.json()
 
         if (!response.ok) {
-          // 🔥 Улучшенная обработка ошибок
-          if (data.error === 'Not enough Stars') {
-            showNotification(
-              'error',
-              `❌ Недостаточно Stars! Нужно: ${data.required}, у вас: ${data.balance}`,
-            )
-          } else if (data.error === 'Energy is full') {
-            showNotification(
-              'warning',
-              `⚡ Энергия полна! ${data.current}/${data.max}`,
-            )
-          } else {
-            throw new Error(data.error || 'Ошибка покупки')
-          }
-          return
+          throw new Error(data.error || 'Ошибка создания платежа')
         }
 
-        setEnergy(data.energy)
-        setPoints(data.starsRemaining)
-        setUserStars(data.starsRemaining)
+        if (data.invoiceLink) {
+          // Открываем окно оплаты
+          const invoiceWindow = window.open(data.invoiceLink, '_blank')
+          if (!invoiceWindow) {
+            throw new Error(
+              'Не удалось открыть окно оплаты. Разрешите всплывающие окна.',
+            )
+          }
 
-        showNotification(
-          'success',
-          `✅ Куплено ${data.energyAdded} энергии! (${data.starsRemaining} ⭐ осталось)`,
-        )
-        setShowEnergyModal(false)
+          showNotification('info', '⏳ Ожидайте подтверждение оплаты...')
+          setShowEnergyModal(false)
+
+          // Проверяем статус платежа
+          const checkPayment = async () => {
+            try {
+              const statusResponse = await fetch(
+                `/api/payments/check-status?memo=${data.payload}&userId=${userId}`,
+              )
+              const statusData = await statusResponse.json()
+
+              if (statusData.success && statusData.status === 'COMPLETED') {
+                showNotification('success', '✅ Энергия куплена!')
+                await fetchUserData()
+                return true
+              }
+              return false
+            } catch (error) {
+              console.error('❌ Status check error:', error)
+              return false
+            }
+          }
+
+          // Проверяем статус каждые 5 секунд
+          let attempts = 0
+          const maxAttempts = 12
+          const interval = setInterval(async () => {
+            attempts++
+            const completed = await checkPayment()
+            if (completed || attempts >= maxAttempts) {
+              clearInterval(interval)
+              if (attempts >= maxAttempts && !completed) {
+                showNotification(
+                  'warning',
+                  '⏳ Время ожидания истекло. Проверьте баланс позже.',
+                )
+              }
+            }
+          }, 5000)
+        }
       } catch (error) {
         const errorMsg =
           error instanceof Error ? error.message : 'Ошибка покупки'
@@ -110,45 +158,49 @@ export function GameUI({ userId }: GameUIProps) {
         setIsBuyingEnergy(false)
       }
     },
-    [userId, setEnergy, setPoints, showNotification],
+    [userId, isDemo, energy, maxEnergy, showNotification, fetchUserData],
   )
+
+  // 🔥 Вспомогательная функция для получения цены в Stars
+  const getStarsPrice = (amount: number): number => {
+    const prices: Record<number, number> = {
+      100: 50,
+      500: 200,
+      1000: 350,
+      5000: 1500,
+    }
+    return prices[amount] || 0
+  }
 
   const handleBuyEnergyTon = useCallback(
     async (amount: number) => {
       setIsBuyingEnergy(true)
       try {
-        const response = await fetch('/api/payments/energy/buy-ton', {
+        // 🔥 Используем НОВЫЙ универсальный эндпоинт для TON
+        const response = await fetch('/api/payments/buy-ton', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, amount }),
+          body: JSON.stringify({
+            userId: userId,
+            type: 'energy',
+            itemName: `${amount} энергии`,
+            itemSku: `energy_${amount}`,
+            price: getTonPrice(amount).toString(),
+            data: { amount: amount },
+          }),
         })
 
         const data = await response.json()
 
         if (!response.ok) {
-          throw new Error(data.error || 'Ошибка покупки за TON')
+          throw new Error(data.error || 'Ошибка создания платежа')
         }
 
-        if (data.tonUri) {
-          window.open(data.tonUri, '_blank')
+        if (data.invoiceLink) {
+          window.open(data.invoiceLink, '_blank')
+          showNotification('info', '⏳ Ожидайте подтверждение оплаты TON...')
+          setShowEnergyModal(false)
         }
-
-        showNotification('info', '⏳ Ожидайте подтверждение оплаты TON...')
-        setShowEnergyModal(false)
-
-        setTimeout(async () => {
-          const statusResponse = await fetch(
-            `/api/payments/check-status?payload=${data.memo}&userId=${userId}`,
-          )
-          const statusData = await statusResponse.json()
-          if (
-            statusData.status === 'SUCCESS' ||
-            statusData.status === 'COMPLETED'
-          ) {
-            showNotification('success', '✅ Оплата TON подтверждена!')
-            fetchUserData()
-          }
-        }, 10000)
       } catch (error) {
         const errorMsg =
           error instanceof Error ? error.message : 'Ошибка покупки за TON'
@@ -157,8 +209,19 @@ export function GameUI({ userId }: GameUIProps) {
         setIsBuyingEnergy(false)
       }
     },
-    [userId, showNotification, fetchUserData],
+    [userId, showNotification],
   )
+
+  // 🔥 Вспомогательная функция для получения цены в TON
+  const getTonPrice = (amount: number): number => {
+    const prices: Record<number, number> = {
+      100: 0.5,
+      500: 2.0,
+      1000: 3.5,
+      5000: 15.0,
+    }
+    return prices[amount] || 0
+  }
 
   const handleBuyBoost = useCallback(() => {
     setIsTonModalOpen(true)
@@ -184,10 +247,6 @@ export function GameUI({ userId }: GameUIProps) {
   return (
     <div className="relative flex flex-col h-screen w-full bg-zinc-950">
       {NotificationComponent}
-
-      {/* 🔥 Демо-баннер полностью удален! Теперь он в page.tsx */}
-
-      {/* ❌ GameAchievementNotifier удален - теперь уведомления внутри GamePlayArea */}
 
       <GameScoreAnimation
         points={points}
@@ -218,7 +277,7 @@ export function GameUI({ userId }: GameUIProps) {
         isSuperhero={isSuperhero}
         isLegendary={isLegendary}
         comboCount={comboCount}
-        points={points} // 🔥 Передаем points для уведомлений
+        points={points}
       />
 
       <GameBottomPanel
@@ -227,6 +286,7 @@ export function GameUI({ userId }: GameUIProps) {
         isBuyingEnergy={isBuyingEnergy}
         onBuyEnergy={() => setShowEnergyModal(true)}
         onBuyBoost={handleBuyBoost}
+        isRegistered={isRegistered}
       />
 
       <GameModals
@@ -235,12 +295,13 @@ export function GameUI({ userId }: GameUIProps) {
         energy={energy}
         maxEnergy={maxEnergy}
         userStars={userStars}
+        userId={userId}
+        isRegistered={isRegistered}
         onBuyStars={handleBuyEnergyStars}
         onBuyTon={handleBuyEnergyTon}
         isBuying={isBuyingEnergy}
         showTonModal={isTonModalOpen}
         onCloseTon={() => setIsTonModalOpen(false)}
-        userId={userId}
         onTonSuccess={handleTonSuccess}
         onTonError={handleTonError}
       />

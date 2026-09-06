@@ -1,4 +1,5 @@
 // types/shop.ts
+
 export interface ShopItem {
   id: string;
   name: string;
@@ -9,10 +10,10 @@ export interface ShopItem {
   color: string;
   bgColor: string;
   borderColor: string;
-  effect: string;
-  effectValue: any;
+  effect: string;        // 'energy', 'speed', 'multiplier', 'passive', 'max_energy'
+  effectValue: any;      // количество энергии, +1 скорость и т.д.
   popular: boolean;
-  category: 'energy' | 'level' | 'vip' | 'skin' | 'mega' | 'other';
+  category: 'energy' | 'level' | 'vip' | 'skin' | 'mega' | 'other' | 'boost';
 }
 
 export interface UserData {
@@ -27,7 +28,11 @@ export interface UserData {
   skin: string;
   vipUntil: string | null;
   totalSpent: number;
+  // Добавляем для бустов
+  speed?: number;        // скорость клика
+  multiplier?: number;   // множитель дохода
 }
+
 export interface ShopHeaderProps {
   userData: {
     points: number;

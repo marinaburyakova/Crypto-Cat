@@ -2,7 +2,7 @@
 'use client'
 
 import { EnergyModal } from './EnergyModal'
-import { TonPaymentModal } from './TonPaymentModal'
+import { TonModal } from './TonModal'
 
 interface GameModalsProps {
   showEnergyModal: boolean
@@ -10,13 +10,13 @@ interface GameModalsProps {
   energy: number
   maxEnergy: number
   userStars: number
+  userId: string
+  isRegistered: boolean  // 🔥 Добавлено
   onBuyStars: (amount: number) => Promise<void>
   onBuyTon: (amount: number) => Promise<void>
   isBuying: boolean
-
   showTonModal: boolean
   onCloseTon: () => void
-  userId: string
   onTonSuccess: () => void
   onTonError: (error: string) => void
 }
@@ -27,12 +27,13 @@ export function GameModals({
   energy,
   maxEnergy,
   userStars,
+  userId,
+  isRegistered,
   onBuyStars,
   onBuyTon,
   isBuying,
   showTonModal,
   onCloseTon,
-  userId,
   onTonSuccess,
   onTonError,
 }: GameModalsProps) {
@@ -44,18 +45,18 @@ export function GameModals({
         currentEnergy={energy}
         maxEnergy={maxEnergy}
         userStars={userStars}
+        userId={userId}
+        isRegistered={isRegistered}
         onBuyStars={onBuyStars}
         onBuyTon={onBuyTon}
         isBuying={isBuying}
       />
 
-      <TonPaymentModal
-        userId={userId}
+      <TonModal
         isOpen={showTonModal}
         onClose={onCloseTon}
-        itemPriceTon="0.5"
-        itemSku="boost_x2"
-        itemName="Бустер пассивного дохода x2"
+        userId={userId}
+        isRegistered={isRegistered}
         onSuccess={onTonSuccess}
         onError={onTonError}
       />

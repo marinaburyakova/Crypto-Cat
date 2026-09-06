@@ -8,6 +8,9 @@ interface StarsPaymentButtonProps {
   itemPriceStars: number
   itemSku: string
   itemName: string
+  itemCategory?: string
+  itemEffect?: string
+  itemEffectValue?: any
   onSuccess?: () => void
   onError?: (error: string) => void
   className?: string
@@ -15,21 +18,14 @@ interface StarsPaymentButtonProps {
   children?: React.ReactNode
 }
 
-// 🔥 Маппинг: цена в Stars → количество энергии
-const ENERGY_BY_PRICE: Record<number, number> = {
-  50: 100, // 50 Stars → 100 энергии
-  100: 200, // 100 Stars → 200 энергии (добавлено)
-  150: 300, // 150 Stars → 300 энергии (добавлено)
-  200: 500, // 200 Stars → 500 энергии
-  350: 1000, // 350 Stars → 1000 энергии
-  1500: 5000, // 1500 Stars → 5000 энергии
-}
-
 export function StarsPaymentButton({
   userId,
   itemPriceStars,
   itemSku,
   itemName,
+  itemCategory = 'other',
+  itemEffect = '',
+  itemEffectValue = 0,
   onSuccess,
   onError,
   className = '',
@@ -56,20 +52,40 @@ export function StarsPaymentButton({
         throw new Error('Некорректная цена товара')
       }
 
-      // 🔥 Получаем количество энергии по цене
-      const energyAmount = ENERGY_BY_PRICE[itemPriceStars]
-      if (!energyAmount) {
-        throw new Error(`Неизвестная цена: ${itemPriceStars} Stars`)
+      // 🔥 Определяем тип покупки
+      let purchaseType = 'other'
+      let purchaseData: any = {}
+
+      if (itemCategory === 'energy') {
+        purchaseType = 'energy'
+        purchaseData = { amount: itemEffectValue }
+      } else if (itemCategory === 'boost') {
+        purchaseType = 'boost'
+        purchaseData = { effect: itemEffect, value: itemEffectValue }
+      } else if (itemCategory === 'level') {
+        purchaseType = 'level'
+        purchaseData = { value: itemEffectValue }
+      } else if (itemCategory === 'vip') {
+        purchaseType = 'vip'
+        purchaseData = { value: itemEffectValue }
+      } else {
+        purchaseType = 'other'
+        purchaseData = { sku: itemSku }
       }
 
-      const response = await fetch('/api/payments/energy/buy-stars', {
+      // 🔥 Отправляем запрос на создание инвойса
+      const response = await fetch('/api/payments/buy-stars', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           userId: userId,
-          amount: energyAmount,
+          type: purchaseType,
+          itemName: itemName,
+          itemSku: itemSku,
+          price: itemPriceStars,
+          data: purchaseData,
         }),
       })
 
@@ -83,6 +99,7 @@ export function StarsPaymentButton({
         throw new Error('Ссылка на оплату не получена')
       }
 
+      // 🔥 Открываем инвойс
       const invoiceWindow = window.open(data.invoiceLink, '_blank')
 
       if (!invoiceWindow) {
@@ -121,10 +138,9 @@ export function StarsPaymentButton({
         )
         const data = await response.json()
 
-        if (data.success && data.status === 'SUCCESS') {
+        if (data.success && data.status === 'COMPLETED') {
           clearInterval(intervalId)
           console.log('✅ Payment confirmed!')
-
           onSuccess?.()
           alert('✅ Платеж успешно подтвержден!')
 
@@ -235,13 +251,3 @@ export function StarsPaymentButton({
     </div>
   )
 }
-
-const styles = `
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .animate-fadeIn {
-    animation: fadeIn 0.3s ease-out;
-  }
-`
