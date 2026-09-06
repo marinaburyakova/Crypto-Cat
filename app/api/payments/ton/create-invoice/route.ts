@@ -11,17 +11,40 @@ export async function POST(request: NextRequest) {
     if (!userId || !amount || !sku) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
-        { status: 400 },
+        { status: 400 }
       )
     }
 
-    // 🔥 БЕРЁМ АДРЕС ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ
+    // 🔥 Проверяем, существует ли пользователь
+    let user = await prisma.user.findUnique({
+      where: { id: userId }
+    })
+
+    if (!user) {
+      console.log('👤 Пользователь не найден, создаём:', userId)
+      user = await prisma.user.create({
+        data: {
+          id: userId,
+          login: userId,
+          points: 0,
+          energy: 1000,
+          maxEnergy: 1000,
+          level: 1,
+          exp: 0,
+          skin: 'default',
+        },
+      })
+    }
+
+    // 🔥 Берём адрес из переменной окружения
     const walletAddress = process.env.MERCHANT_WALLET_ADDRESS
+    console.log('💰 Wallet address:', walletAddress)
+
     if (!walletAddress) {
-      console.error('❌ MERCHANT_WALLET_ADDRESS not set in .env')
+      console.error('❌ MERCHANT_WALLET_ADDRESS not set')
       return NextResponse.json(
         { success: false, error: 'Payment system not configured' },
-        { status: 500 },
+        { status: 500 }
       )
     }
 
@@ -31,7 +54,7 @@ export async function POST(request: NextRequest) {
     // Сохраняем транзакцию в БД
     const transaction = await prisma.transaction.create({
       data: {
-        userId,
+        userId: user.id,
         amount: parseFloat(amount),
         currency: 'TON',
         status: 'PENDING',
@@ -49,10 +72,14 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ TON transaction created:', transaction.id)
 
-    // 🔥 Формируем ссылку для TON кошелька
-    // amount в TON * 1_000_000_000 = нано-TON
+    // 🔥 Формируем ссылку для TON кошелька (Testnet)
     const amountNano = parseFloat(amount) * 1000000000
+    const network = process.env.TON_NETWORK || 'mainnet'
+    
+    // Для Testnet адрес должен начинаться с 0Q или kQ
     const tonUri = `ton://transfer/${walletAddress}?amount=${amountNano}&memo=${payload}`
+
+    console.log('🔗 tonUri:', tonUri)
 
     return NextResponse.json({
       success: true,
@@ -61,11 +88,12 @@ export async function POST(request: NextRequest) {
       transactionId: transaction.id,
       walletAddress,
     })
+
   } catch (error) {
     console.error('❌ TON invoice error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }
