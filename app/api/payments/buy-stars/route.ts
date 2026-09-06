@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
           title: itemName || 'Покупка за Stars',
           description: description,
           payload: payload,
-          currency: 'XTR',
+          currency: 'XTR', // Telegram Stars
           prices: [{ label: itemName || 'Товар', amount: price * 100 }],
         }),
       }
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Сохраняем транзакцию
     await prisma.transaction.create({
       data: {
         userId,

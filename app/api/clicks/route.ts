@@ -8,13 +8,8 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'UserId is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'UserId is required' }, { status: 400 })
     }
-
-    console.log('📊 GET /api/clicks for user:', userId)
 
     // ✅ Автоматически создаём пользователя, если его нет
     const user = await prisma.user.upsert({
@@ -33,13 +28,6 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    console.log('✅ User data:', {
-      id: user.id,
-      points: Number(user.points),
-      energy: user.energy,
-      level: user.level,
-    })
-
     return NextResponse.json({
       points: Number(user.points),
       energy: user.energy,
@@ -56,7 +44,7 @@ export async function GET(request: NextRequest) {
     console.error('❌ Error in /api/clicks:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
