@@ -24,7 +24,6 @@ export function GameUI({ userId }: GameUIProps) {
   const { showNotification, NotificationComponent } = useNotification()
 
   const isDemo = userId === 'demo'
-  const isRegistered = userId !== 'demo' && userId !== ''
 
   const {
     points,
@@ -64,10 +63,10 @@ export function GameUI({ userId }: GameUIProps) {
   // 🔥 ВРЕМЕННЫЕ ЦЕНЫ ДЛЯ ТЕСТА (5, 10, 20, 50 Stars)
   const getStarsPrice = (amount: number): number => {
     const prices: Record<number, number> = {
-      100: 5,    // ← 5 Stars за 100 энергии
-      500: 10,   // ← 10 Stars за 500 энергии
-      1000: 20,  // ← 20 Stars за 1000 энергии
-      5000: 50,  // ← 50 Stars за 5000 энергии
+      100: 5,
+      500: 10,
+      1000: 20,
+      5000: 50,
     }
     return prices[amount] || 0
   }
@@ -82,18 +81,8 @@ export function GameUI({ userId }: GameUIProps) {
     return prices[amount] || 0
   }
 
-  // 🔥 НОВАЯ ФУНКЦИЯ покупки за Stars через универсальный эндпоинт
   const handleBuyEnergyStars = useCallback(
     async (amount: number) => {
-      // Проверяем, не демо-режим ли
-      if (isDemo) {
-        showNotification(
-          'warning',
-          '⚠️ В демо-режиме покупка за Stars недоступна',
-        )
-        return
-      }
-
       // Проверяем, не полна ли энергия
       if (energy >= maxEnergy) {
         showNotification('warning', '⚡ Энергия полна!')
@@ -103,8 +92,7 @@ export function GameUI({ userId }: GameUIProps) {
       setIsBuyingEnergy(true)
       try {
         const price = getStarsPrice(amount)
-        
-        // 🔥 Используем НОВЫЙ универсальный эндпоинт
+
         const response = await fetch('/api/payments/buy-stars', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -125,7 +113,6 @@ export function GameUI({ userId }: GameUIProps) {
         }
 
         if (data.invoiceLink) {
-          // Открываем окно оплаты
           const invoiceWindow = window.open(data.invoiceLink, '_blank')
           if (!invoiceWindow) {
             throw new Error(
@@ -136,7 +123,6 @@ export function GameUI({ userId }: GameUIProps) {
           showNotification('info', '⏳ Ожидайте подтверждение оплаты...')
           setShowEnergyModal(false)
 
-          // Проверяем статус платежа
           const checkPayment = async () => {
             try {
               const statusResponse = await fetch(
@@ -156,7 +142,6 @@ export function GameUI({ userId }: GameUIProps) {
             }
           }
 
-          // Проверяем статус каждые 5 секунд
           let attempts = 0
           const maxAttempts = 12
           const interval = setInterval(async () => {
@@ -174,14 +159,13 @@ export function GameUI({ userId }: GameUIProps) {
           }, 5000)
         }
       } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Ошибка покупки'
+        const errorMsg = error instanceof Error ? error.message : 'Ошибка покупки'
         showNotification('error', `❌ ${errorMsg}`)
       } finally {
         setIsBuyingEnergy(false)
       }
     },
-    [userId, isDemo, energy, maxEnergy, showNotification, fetchUserData],
+    [userId, energy, maxEnergy, showNotification, fetchUserData],
   )
 
   const handleBuyEnergyTon = useCallback(
@@ -189,8 +173,7 @@ export function GameUI({ userId }: GameUIProps) {
       setIsBuyingEnergy(true)
       try {
         const price = getTonPrice(amount)
-        
-        // 🔥 Используем НОВЫЙ универсальный эндпоинт для TON
+
         const response = await fetch('/api/payments/buy-ton', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -216,8 +199,7 @@ export function GameUI({ userId }: GameUIProps) {
           setShowEnergyModal(false)
         }
       } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Ошибка покупки за TON'
+        const errorMsg = error instanceof Error ? error.message : 'Ошибка покупки за TON'
         showNotification('error', `❌ ${errorMsg}`)
       } finally {
         setIsBuyingEnergy(false)
@@ -289,7 +271,6 @@ export function GameUI({ userId }: GameUIProps) {
         isBuyingEnergy={isBuyingEnergy}
         onBuyEnergy={() => setShowEnergyModal(true)}
         onBuyBoost={handleBuyBoost}
-        isRegistered={isRegistered}
       />
 
       <GameModals
@@ -299,7 +280,6 @@ export function GameUI({ userId }: GameUIProps) {
         maxEnergy={maxEnergy}
         userStars={userStars}
         userId={userId}
-        isRegistered={isRegistered}
         onBuyStars={handleBuyEnergyStars}
         onBuyTon={handleBuyEnergyTon}
         isBuying={isBuyingEnergy}

@@ -11,7 +11,6 @@ interface GameModalsProps {
   maxEnergy: number
   userStars: number
   userId: string
-  isRegistered: boolean  // 🔥 Добавлено
   onBuyStars: (amount: number) => Promise<void>
   onBuyTon: (amount: number) => Promise<void>
   isBuying: boolean
@@ -28,7 +27,6 @@ export function GameModals({
   maxEnergy,
   userStars,
   userId,
-  isRegistered,
   onBuyStars,
   onBuyTon,
   isBuying,
@@ -46,7 +44,6 @@ export function GameModals({
         maxEnergy={maxEnergy}
         userStars={userStars}
         userId={userId}
-        isRegistered={isRegistered}
         onBuyStars={onBuyStars}
         onBuyTon={onBuyTon}
         isBuying={isBuying}
@@ -56,7 +53,6 @@ export function GameModals({
         isOpen={showTonModal}
         onClose={onCloseTon}
         userId={userId}
-        isRegistered={isRegistered}
         onSuccess={onTonSuccess}
         onError={onTonError}
       />

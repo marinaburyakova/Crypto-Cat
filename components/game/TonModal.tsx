@@ -1,15 +1,13 @@
 // components/game/TonModal.tsx
 'use client'
 
-import { X, Loader2, Sparkles, Crown } from 'lucide-react'
+import { X, Loader2, Sparkles } from 'lucide-react'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 interface TonModalProps {
   isOpen: boolean
   onClose: () => void
   userId: string
-  isRegistered: boolean
   onSuccess: () => void
   onError: (error: string) => void
 }
@@ -18,13 +16,11 @@ export function TonModal({
   isOpen,
   onClose,
   userId,
-  isRegistered,
   onSuccess,
   onError,
 }: TonModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [selectedBoost, setSelectedBoost] = useState<string | null>(null)
-  const router = useRouter()
 
   if (!isOpen) return null
 
@@ -67,26 +63,21 @@ export function TonModal({
     },
   ]
 
-  const handleBuyBoost = async (boost: (typeof BOOSTS)[0]) => {
-    if (!isRegistered) {
-      router.push('/login')
-      return
-    }
-
+  const handleBuyBoost = async (boost: typeof BOOSTS[0]) => {
     setSelectedBoost(boost.id)
     setIsLoading(true)
 
     try {
-      // 🔥 Отправляем запрос на создание платежа
       const response = await fetch('/api/payments/buy-ton', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: userId,
-          amount: boost.effect === 'max_energy' ? 100 : 100, // Временно
           type: 'boost',
           itemName: boost.name,
-          // Для бустов нужна особая логика, пока используем энергию
+          itemSku: boost.id,
+          price: boost.priceTon.toString(),
+          data: { effect: boost.effect, value: boost.value },
         }),
       })
 
@@ -96,52 +87,14 @@ export function TonModal({
         throw new Error(data.error || 'Ошибка создания платежа')
       }
 
-      // 🔥 Открываем Tonkeeper с ссылкой на оплату
-      if (data.paymentLink) {
-        // Открываем Tonkeeper (или другой кошелек)
-        window.open(data.paymentLink, '_blank')
-
-        // 🔥 Начинаем проверку статуса платежа
-        const checkStatus = async () => {
-          try {
-            const statusResponse = await fetch(
-              `/api/payments/check-status?memo=${data.paymentId}&userId=${userId}`,
-            )
-            const statusData = await statusResponse.json()
-
-            if (statusData.success && statusData.status === 'COMPLETED') {
-              alert('✅ Оплата подтверждена! Буст активирован.')
-              onSuccess?.()
-              onClose()
-              window.location.reload()
-              return true
-            }
-            return false
-          } catch (error) {
-            console.error('❌ Status check error:', error)
-            return false
-          }
-        }
-
-        // Проверяем статус каждые 5 секунд (максимум 12 раз)
-        let attempts = 0
-        const maxAttempts = 12
-        const interval = setInterval(async () => {
-          attempts++
-          const completed = await checkStatus()
-          if (completed || attempts >= maxAttempts) {
-            clearInterval(interval)
-            if (attempts >= maxAttempts && !completed) {
-              alert(
-                '⏳ Время ожидания платежа истекло. Проверьте баланс позже.',
-              )
-            }
-          }
-        }, 5000)
+      if (data.invoiceLink) {
+        window.open(data.invoiceLink, '_blank')
+        alert('⏳ Ожидайте подтверждение оплаты TON...')
+        onSuccess?.()
+        onClose()
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Ошибка покупки'
+      const errorMessage = error instanceof Error ? error.message : 'Ошибка покупки'
       console.error('❌ TON boost error:', error)
       onError?.(errorMessage)
       alert(`❌ ${errorMessage}`)
@@ -172,54 +125,19 @@ export function TonModal({
           </div>
         </div>
 
-        {!isRegistered && (
-          <div className="mb-4 p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-0.5">
-                <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                  <Crown className="w-4 h-4 text-amber-400" />
-                </div>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-amber-400">
-                  🔒 Только для зарегистрированных
-                </p>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Войдите в аккаунт, чтобы покупать бусты за TON
-                </p>
-                <button
-                  onClick={() => router.push('/login')}
-                  className="mt-3 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold rounded-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg shadow-amber-500/20"
-                >
-                  🔐 Войти
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="space-y-3">
           {BOOSTS.map((boost) => (
             <button
               key={boost.id}
               onClick={() => handleBuyBoost(boost)}
-              disabled={isLoading || !isRegistered}
-              className={`
-                w-full p-3.5 rounded-xl flex justify-between items-center transition-all
-                ${
-                  !isRegistered
-                    ? 'bg-slate-800/50 opacity-40 cursor-not-allowed'
-                    : 'bg-slate-800 hover:bg-slate-700 active:scale-95'
-                }
-              `}
+              disabled={isLoading}
+              className="w-full p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 transition-all flex justify-between items-center"
             >
               <span className="flex items-center gap-3">
                 <span className="text-lg">{boost.icon}</span>
                 <div className="text-left">
                   <span className="font-medium text-white">{boost.name}</span>
-                  <span className="text-xs text-slate-400 block">
-                    {boost.description}
-                  </span>
+                  <span className="text-xs text-slate-400 block">{boost.description}</span>
                 </div>
               </span>
               <span className="font-bold text-blue-400">
