@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
-// 🔥 Упрощаем схему для регистрации (без confirmPassword)
 const registerSchema = z.object({
   login: z
     .string()
@@ -29,19 +28,56 @@ const registerSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     console.log('📝 [SERVER] Регистрация начата')
+    console.log('📝 [SERVER] Method:', request.method)
+    console.log('📝 [SERVER] Headers:', Object.fromEntries(request.headers))
 
     // 1️⃣ Получаем тело запроса
-    const body = await request.json()
-    console.log('📝 [SERVER] Получен body:', body)
+    let body
+    try {
+      body = await request.json()
+    } catch (parseError) {
+      console.error('❌ [SERVER] Ошибка парсинга JSON:', parseError)
+      return NextResponse.json(
+        { success: false, error: 'Неверный формат запроса' },
+        { status: 400 },
+      )
+    }
+
+    console.log('📝 [SERVER] Получен body:', JSON.stringify(body))
 
     // 2️⃣ Валидация
-    const validated = registerSchema.parse(body)
+    let validated
+    try {
+      validated = registerSchema.parse(body)
+    } catch (validationError) {
+      console.error('❌ [SERVER] Ошибка валидации:', validationError)
+      if (validationError instanceof z.ZodError) {
+        return NextResponse.json(
+          {
+            success: false,
+            errors: validationError.issues.map((e) => e.message),
+          },
+          { status: 400 },
+        )
+      }
+      throw validationError
+    }
+
     console.log('✅ [SERVER] Валидация пройдена для:', validated.login)
 
     // 3️⃣ Проверка существующего пользователя
-    const existingUser = await prisma.user.findUnique({
-      where: { login: validated.login },
-    })
+    let existingUser
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { login: validated.login },
+      })
+    } catch (dbError) {
+      console.error('❌ [SERVER] Ошибка запроса к БД:', dbError)
+      return NextResponse.json(
+        { success: false, error: 'Ошибка базы данных' },
+        { status: 500 },
+      )
+    }
 
     if (existingUser) {
       console.log('⚠️ [SERVER] Пользователь уже существует:', validated.login)
@@ -55,37 +91,54 @@ export async function POST(request: NextRequest) {
     }
 
     // 4️⃣ Хеширование пароля
-    const saltRounds = 12
-    const hashedPassword = await bcrypt.hash(validated.password, saltRounds)
-    console.log('✅ [SERVER] Пароль захэширован')
+    let hashedPassword
+    try {
+      const saltRounds = 12
+      hashedPassword = await bcrypt.hash(validated.password, saltRounds)
+      console.log('✅ [SERVER] Пароль захэширован')
+    } catch (hashError) {
+      console.error('❌ [SERVER] Ошибка хеширования:', hashError)
+      return NextResponse.json(
+        { success: false, error: 'Ошибка шифрования' },
+        { status: 500 },
+      )
+    }
 
     // 5️⃣ Создание пользователя
-    const user = await prisma.user.create({
-      data: {
-        id: crypto.randomUUID(),
-        login: validated.login,
-        password: hashedPassword,
-        points: 0,
-        energy: 1000,
-        maxEnergy: 1000,
-        level: 1,
-        exp: 0,
-        skin: 'default',
-      },
-      select: {
-        id: true,
-        login: true,
-        points: true,
-        energy: true,
-        maxEnergy: true,
-        level: true,
-        exp: true,
-        skin: true,
-        createdAt: true,
-      },
-    })
-
-    console.log('✅ [SERVER] Пользователь создан:', user.login)
+    let user
+    try {
+      user = await prisma.user.create({
+        data: {
+          id: crypto.randomUUID(),
+          login: validated.login,
+          password: hashedPassword,
+          points: 0,
+          energy: 1000,
+          maxEnergy: 1000,
+          level: 1,
+          exp: 0,
+          skin: 'default',
+        },
+        select: {
+          id: true,
+          login: true,
+          points: true,
+          energy: true,
+          maxEnergy: true,
+          level: true,
+          exp: true,
+          skin: true,
+          createdAt: true,
+        },
+      })
+      console.log('✅ [SERVER] Пользователь создан:', user.login)
+    } catch (createError) {
+      console.error('❌ [SERVER] Ошибка создания пользователя:', createError)
+      return NextResponse.json(
+        { success: false, error: 'Ошибка создания пользователя' },
+        { status: 500 },
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -103,15 +156,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('❌ [SERVER] Ошибка регистрации:', error)
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, errors: error.issues.map((e) => e.message) },
-        { status: 400 },
-      )
-    }
-
+    console.error('❌ [SERVER] Неизвестная ошибка:', error)
     return NextResponse.json(
       { success: false, error: 'Внутренняя ошибка сервера' },
       { status: 500 },

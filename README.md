@@ -25,7 +25,7 @@
 
 | Категория | Технологии |
 |-----------|------------|
-| **Frontend** | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind 4 CSS |
 | **3D** | Three.js, GLTFLoader |
 | **Backend** | Next.js API Routes, Prisma ORM |
 | **База данных** | PostgreSQL 17, Redis 7 |
