@@ -305,7 +305,7 @@ npm run type-check   # Проверка типов
 MIT License — используйте как хотите 🚀
 
 📞 Контакты
-Разработчик: [Your Name]
+Разработчик: [Your  Name]
 
 Telegram: [@your_telegram]
 
