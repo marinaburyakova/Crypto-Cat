@@ -76,14 +76,31 @@ export function GameUI({ userId }: GameUIProps) {
         const data = await response.json()
 
         if (!response.ok) {
-          throw new Error(data.error || 'Ошибка покупки')
+          // 🔥 Улучшенная обработка ошибок
+          if (data.error === 'Not enough Stars') {
+            showNotification(
+              'error',
+              `❌ Недостаточно Stars! Нужно: ${data.required}, у вас: ${data.balance}`,
+            )
+          } else if (data.error === 'Energy is full') {
+            showNotification(
+              'warning',
+              `⚡ Энергия полна! ${data.current}/${data.max}`,
+            )
+          } else {
+            throw new Error(data.error || 'Ошибка покупки')
+          }
+          return
         }
 
         setEnergy(data.energy)
         setPoints(data.starsRemaining)
         setUserStars(data.starsRemaining)
 
-        showNotification('success', `✅ Куплено ${data.energyAdded} энергии!`)
+        showNotification(
+          'success',
+          `✅ Куплено ${data.energyAdded} энергии! (${data.starsRemaining} ⭐ осталось)`,
+        )
         setShowEnergyModal(false)
       } catch (error) {
         const errorMsg =

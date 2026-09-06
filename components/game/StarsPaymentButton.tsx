@@ -49,7 +49,7 @@ export function StarsPaymentButton({
       }
 
       // ✅ Используем правильный API эндпоинт
-      const response = await fetch('/api/payments/stars-invoice', {
+      const response = await fetch('/api/payments/energy/buy-stars', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
