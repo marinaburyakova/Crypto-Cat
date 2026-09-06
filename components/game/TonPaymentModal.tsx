@@ -1,21 +1,21 @@
 // components/game/TonPaymentModal.tsx
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { X, Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 
-interface TonModalProps {
-  userId: string;
-  isOpen: boolean;
-  onClose: () => void;
-  itemPriceTon: string;
-  itemSku: string;
-  itemName: string;
-  onSuccess?: () => void;
-  onError?: (error: string) => void; // ✅ Добавлен обработчик ошибок
+interface TonPaymentModalProps {
+  userId: string
+  isOpen: boolean
+  onClose: () => void
+  itemPriceTon: string
+  itemSku: string
+  itemName: string
+  onSuccess: () => void
+  onError: (error: string) => void
 }
 
-export function TonPaymentModal({ 
+export function TonPaymentModal({
   userId,
   isOpen,
   onClose,
@@ -23,359 +23,201 @@ export function TonPaymentModal({
   itemSku,
   itemName,
   onSuccess,
-  onError // ✅ Добавлен
-}: TonModalProps) {
-  const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [transactionId, setTransactionId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  onError,
+}: TonPaymentModalProps) {
+  const [status, setStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [payload, setPayload] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isOpen) {
-      setStatus('idle');
-      setTransactionId(null);
-      setErrorMessage(null);
-      setPaymentLink(null);
+    if (!isOpen) {
+      setStatus('idle')
+      setErrorMessage(null)
+      setPayload(null)
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   const handlePayment = async () => {
-    setStatus('processing');
-    setErrorMessage(null);
-    
+    setStatus('loading')
+    setErrorMessage(null)
+
     try {
-      // ✅ Валидация входных данных
-      if (!userId) {
-        throw new Error('ID пользователя не указан');
-      }
+      console.log('🔄 Creating TON invoice...')
 
-      if (!itemSku) {
-        throw new Error('SKU товара не указан');
-      }
-
-      const price = parseFloat(itemPriceTon);
-      if (isNaN(price) || price <= 0) {
-        throw new Error('Некорректная цена товара');
-      }
-
-      // ✅ Используем правильный API эндпоинт для TON
-      const response = await fetch('/api/payments/ton-invoice', {
+      const response = await fetch('/api/payments/ton/create-invoice', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          itemPriceTon: itemPriceTon,
-          itemSku,
+          amount: itemPriceTon,
+          sku: itemSku,
           itemName,
         }),
-      });
+      })
 
-      const data = await response.json();
-      
+      // 🔥 Проверяем, что ответ JSON
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('❌ Server returned non-JSON:', text)
+        throw new Error('Сервер вернул ошибку. Попробуйте позже.')
+      }
+
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка создания платежа');
+        throw new Error(data.error || 'Ошибка создания платежа')
       }
 
-      // ✅ Проверяем наличие TON URI
-      if (!data.tonUri) {
-        throw new Error('Ссылка на оплату TON не получена');
+      console.log('✅ Invoice created:', data)
+      setPayload(data.payload)
+
+      // Открываем кошелёк TON
+      if (data.tonUri) {
+        console.log('🔗 Opening TON wallet:', data.tonUri)
+        window.open(data.tonUri, '_blank')
       }
 
-      setTransactionId(data.transactionId || null);
-      setPaymentLink(data.tonUri);
+      // Проверяем статус платежа
+      let attempts = 0
+      const maxAttempts = 15 // 15 попыток * 3 секунды = 45 секунд
 
-      // ✅ Открываем TON URI для оплаты
-      // Это может быть ссылка на кошелек или deeplink
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // На мобильных - открываем в приложении кошелька
-        window.location.href = data.tonUri;
-      } else {
-        // На десктопе - показываем QR код или ссылку
-        // Для простоты - открываем в новом окне
-        const newWindow = window.open(data.tonUri, '_blank');
-        if (!newWindow) {
-          // Если не удалось открыть окно, показываем ссылку
-          setErrorMessage('Нажмите на ссылку для оплаты или скопируйте ее в кошелек');
+      const checkStatus = async (): Promise<boolean> => {
+        try {
+          const statusResponse = await fetch(
+            `/api/payments/check-status?payload=${data.payload}&userId=${userId}`,
+          )
+          const statusData = await statusResponse.json()
+
+          console.log(`📊 Status check #${attempts + 1}:`, statusData.status)
+
+          if (
+            statusData.status === 'SUCCESS' ||
+            statusData.status === 'COMPLETED'
+          ) {
+            setStatus('success')
+            onSuccess()
+            return true
+          } else if (
+            statusData.status === 'FAILED' ||
+            statusData.status === 'REFUNDED'
+          ) {
+            throw new Error('Платёж не удался')
+          }
+          return false
+        } catch (err) {
+          console.error('❌ Status check error:', err)
+          return false
         }
       }
 
-      // ✅ Начинаем проверку статуса платежа
-      if (data.memo) {
-        startPaymentStatusCheck(data.memo);
-      } else {
-        // Если нет memo, используем fallback
-        // В реальном проекте здесь будет ожидание подтверждения
-        setTimeout(() => {
-          setStatus('success');
-          onSuccess?.();
-        }, 5000);
-      }
+      // Ждём 5 секунд перед первой проверкой (даём время на оплату)
+      await new Promise((resolve) => setTimeout(resolve, 5000))
 
+      const interval = setInterval(async () => {
+        attempts++
+        const done = await checkStatus()
+
+        if (done || attempts >= maxAttempts) {
+          clearInterval(interval)
+          if (attempts >= maxAttempts && !done) {
+            setStatus('error')
+            setErrorMessage('Превышено время ожидания платежа')
+            onError('Превышено время ожидания платежа')
+          }
+        }
+      }, 3000)
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Ошибка при оплате TON';
-      console.error('❌ Payment error:', errorMsg);
-      setStatus('error');
-      setErrorMessage(errorMsg);
-      
-      // ✅ Вызываем onError если передан
-      if (onError) {
-        onError(errorMsg);
-      }
+      const message = error instanceof Error ? error.message : 'Ошибка оплаты'
+      console.error('❌ Payment error:', message)
+      setStatus('error')
+      setErrorMessage(message)
+      onError(message)
     }
-  };
+  }
 
-  // ✅ Функция проверки статуса платежа
-  const startPaymentStatusCheck = (memo: string) => {
-    let attempts = 0;
-    const maxAttempts = 60; // Максимум 60 попыток (5 минут)
-    const intervalId = setInterval(async () => {
-      attempts++;
-      
-      try {
-        const response = await fetch(`/api/payments/check-status?memo=${memo}&userId=${userId}`);
-        const data = await response.json();
-
-        if (data.success && data.status === 'SUCCESS') {
-          clearInterval(intervalId);
-          console.log('✅ TON Payment confirmed!');
-          setStatus('success');
-          onSuccess?.();
-          return;
-        }
-
-        // Если статус FAILED или REFUNDED
-        if (data.status === 'FAILED' || data.status === 'REFUNDED') {
-          clearInterval(intervalId);
-          console.warn('⚠️ TON Payment failed or refunded');
-          
-          const errorMsg = data.status === 'FAILED' 
-            ? 'Платеж TON не удался' 
-            : 'Платеж TON был возвращен';
-          
-          setStatus('error');
-          setErrorMessage(errorMsg);
-          
-          if (onError) {
-            onError(errorMsg);
-          }
-          return;
-        }
-
-        // Если превышено количество попыток
-        if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
-          console.warn('⚠️ TON Payment status check timeout');
-          setStatus('error');
-          setErrorMessage('Превышено время ожидания подтверждения платежа TON');
-          
-          if (onError) {
-            onError('Превышено время ожидания подтверждения платежа TON');
-          }
-        }
-
-      } catch (error) {
-        console.error('❌ Status check error:', error);
-        
-        // Если ошибка при проверке, продолжаем пытаться
-        if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
-          setStatus('error');
-          setErrorMessage('Ошибка проверки статуса платежа TON');
-          
-          if (onError) {
-            onError('Ошибка проверки статуса платежа TON');
-          }
-        }
-      }
-    }, 5000); // Проверка каждые 5 секунд
-
-    // ✅ Возвращаем функцию для очистки интервала
-    return () => clearInterval(intervalId);
-  };
-
-  // ✅ Функция копирования ссылки в буфер обмена
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      alert('✅ Ссылка скопирована в буфер обмена!');
-    } catch (error) {
-      console.error('❌ Failed to copy:', error);
-      // Fallback
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      alert('✅ Ссылка скопирована!');
-    }
-  };
-
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full relative shadow-2xl shadow-purple-500/20">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md relative">
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
-          disabled={status === 'processing'}
+          className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 transition-colors"
+          disabled={status === 'loading'}
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-            <span className="text-2xl">₿</span>
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-white">
-              Оплата TON
-            </h3>
-            <p className="text-xs text-slate-400">
-              {itemName}
-            </p>
-          </div>
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-2">₿</div>
+          <h2 className="text-xl font-bold text-white">Оплата TON</h2>
+          <p className="text-slate-400 text-sm mt-1">
+            {itemName} — {itemPriceTon} TON
+          </p>
         </div>
 
-        {/* Информация о товаре */}
-        <div className="bg-slate-800/50 rounded-xl p-3 mb-4 border border-slate-700">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-slate-400">Товар:</span>
-            <span className="text-sm font-medium text-white">{itemName}</span>
-          </div>
-          <div className="flex justify-between items-center mt-1">
-            <span className="text-sm text-slate-400">Сумма:</span>
-            <span className="text-lg font-bold text-amber-400">{itemPriceTon} TON</span>
-          </div>
-          <div className="flex justify-between items-center mt-1">
-            <span className="text-sm text-slate-400">Курс:</span>
-            <span className="text-xs text-slate-500">1 TON ≈ $5.50 USD</span>
-          </div>
-        </div>
-
-        {/* Состояния */}
         {status === 'idle' && (
-          <div className="space-y-3">
-            <button
-              onClick={handlePayment}
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30"
-            >
-              <span className="text-xl">₿</span> Оплатить {itemPriceTon} TON
-            </button>
-            
-            <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-medium py-2 rounded-xl transition-colors text-sm"
-              >
-                Отмена
-              </button>
-            </div>
-
-            <p className="text-[10px] text-slate-500 text-center">
-              💡 Оплата происходит через TON кошелек. Убедитесь, что у вас есть TON для оплаты.
-            </p>
-          </div>
+          <button
+            onClick={handlePayment}
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            Оплатить {itemPriceTon} TON
+          </button>
         )}
 
-        {status === 'processing' && (
-          <div className="text-center py-6">
-            <Loader2 className="w-14 h-14 animate-spin text-blue-400 mx-auto mb-4" />
-            <p className="text-sm font-medium text-slate-200">Ожидание подтверждения платежа...</p>
-            <p className="text-xs text-slate-400 mt-1">Пожалуйста, подтвердите транзакцию в TON кошельке</p>
-            
-            {/* Показываем ссылку на оплату, если есть */}
-            {paymentLink && (
-              <div className="mt-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                <p className="text-xs text-slate-400 mb-2">Или перейдите по ссылке:</p>
-                <button
-                  onClick={() => copyToClipboard(paymentLink)}
-                  className="text-xs text-blue-400 hover:text-blue-300 break-all bg-slate-700/50 px-3 py-2 rounded-lg w-full"
-                >
-                  {paymentLink.length > 40 ? `${paymentLink.substring(0, 40)}...` : paymentLink}
-                </button>
-              </div>
+        {status === 'loading' && (
+          <div className="text-center py-4">
+            <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
+            <p className="text-slate-300 font-medium">Ожидание оплаты...</p>
+            <p className="text-slate-500 text-sm mt-1">
+              Откройте кошелёк TON и подтвердите платеж
+            </p>
+            {payload && (
+              <p className="text-slate-600 text-xs mt-4 break-all">
+                ID: {payload}
+              </p>
             )}
-            
             <button
-              onClick={() => {
-                setStatus('idle');
-                setErrorMessage(null);
-              }}
-              className="mt-4 text-sm text-slate-500 hover:text-slate-400 transition-colors"
+              onClick={onClose}
+              className="mt-4 text-slate-500 hover:text-slate-300 text-sm transition-colors"
             >
-              ← Назад
+              Отменить
             </button>
           </div>
         )}
 
         {status === 'success' && (
-          <div className="text-center py-6">
-            <div className="relative">
-              <div className="w-16 h-16 mx-auto mb-4">
-                <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping" />
-                <CheckCircle className="w-16 h-16 text-green-400 relative" />
-              </div>
-            </div>
-            <p className="text-lg font-bold text-green-400">✅ Платеж успешен!</p>
-            <p className="text-sm text-slate-400 mt-1">
-              Товар <span className="text-white font-medium">{itemName}</span> применен к вашему аккаунту
+          <div className="text-center py-4">
+            <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+            <p className="text-green-400 font-bold text-lg">
+              ✅ Оплата успешна!
             </p>
-            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <p className="text-xs text-green-400 flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                Транзакция завершена
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="mt-6 w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg shadow-green-500/30"
-            >
-              Закрыть
-            </button>
+            <p className="text-slate-400 text-sm mt-1">
+              Товар активирован. Приятной игры! 🎮
+            </p>
           </div>
         )}
 
         {status === 'error' && (
-          <div className="text-center py-6">
-            <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-            <p className="text-lg font-bold text-red-400">❌ Ошибка платежа</p>
-            <p className="text-sm text-slate-400 mt-1">
-              {errorMessage || 'Произошла ошибка при обработке платежа'}
-            </p>
-            
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-left">
-              <p className="text-xs text-red-400 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>Проверьте баланс TON кошелька и попробуйте снова</span>
-              </p>
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setStatus('idle');
-                  setErrorMessage(null);
-                }}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition-colors"
-              >
-                Попробовать снова
-              </button>
-              <button
-                onClick={onClose}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-medium py-2.5 rounded-xl transition-colors"
-              >
-                Закрыть
-              </button>
-            </div>
+          <div className="text-center py-4">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <p className="text-red-400 font-bold">❌ Ошибка оплаты</p>
+            <p className="text-slate-400 text-sm mt-1">{errorMessage}</p>
+            <button
+              onClick={() => {
+                setStatus('idle')
+                setErrorMessage(null)
+              }}
+              className="mt-4 bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-xl transition-colors"
+            >
+              Попробовать снова
+            </button>
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
