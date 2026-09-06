@@ -17,10 +17,12 @@ interface StarsPaymentButtonProps {
 
 // 🔥 Маппинг: цена в Stars → количество энергии
 const ENERGY_BY_PRICE: Record<number, number> = {
-  50: 100,
-  200: 500,
-  350: 1000,
-  1500: 5000,
+  50: 100, // 50 Stars → 100 энергии
+  100: 200, // 100 Stars → 200 энергии (добавлено)
+  150: 300, // 150 Stars → 300 энергии (добавлено)
+  200: 500, // 200 Stars → 500 энергии
+  350: 1000, // 350 Stars → 1000 энергии
+  1500: 5000, // 1500 Stars → 5000 энергии
 }
 
 export function StarsPaymentButton({
@@ -67,7 +69,7 @@ export function StarsPaymentButton({
         },
         body: JSON.stringify({
           userId: userId,
-          amount: energyAmount, // ← Отправляем количество энергии
+          amount: energyAmount,
         }),
       })
 
