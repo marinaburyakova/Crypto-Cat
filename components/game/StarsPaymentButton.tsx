@@ -1,4 +1,3 @@
-// components/game/StarsPaymentButton.tsx
 'use client'
 
 import { useState } from 'react'
@@ -40,53 +39,26 @@ export function StarsPaymentButton({
     setIsLoading(true)
 
     try {
-      if (!userId) {
-        throw new Error('ID пользователя не указан')
-      }
+      if (!userId) throw new Error('ID пользователя не указан')
+      if (!itemSku) throw new Error('SKU товара не указан')
+      if (itemPriceStars <= 0) throw new Error('Некорректная цена товара')
 
-      if (!itemSku) {
-        throw new Error('SKU товара не указан')
-      }
+      // 🔥 Безопасное получение WebApp API внутри функции (защита от падения SSR)
+      const tgWebApp = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : undefined
 
-      if (itemPriceStars <= 0) {
-        throw new Error('Некорректная цена товара')
-      }
+      // 🔥 Корректно подготавливаем body под наш бэкенд
+      const requestBody: any = { userId, itemSku }
 
-      // 🔥 Определяем тип покупки
-      let purchaseType = 'other'
-      let purchaseData: any = {}
-
+      // Если категория "энергия", передаем числовое количество для бэкенда
       if (itemCategory === 'energy') {
-        purchaseType = 'energy'
-        purchaseData = { amount: itemEffectValue }
-      } else if (itemCategory === 'boost') {
-        purchaseType = 'boost'
-        purchaseData = { effect: itemEffect, value: itemEffectValue }
-      } else if (itemCategory === 'level') {
-        purchaseType = 'level'
-        purchaseData = { value: itemEffectValue }
-      } else if (itemCategory === 'vip') {
-        purchaseType = 'vip'
-        purchaseData = { value: itemEffectValue }
-      } else {
-        purchaseType = 'other'
-        purchaseData = { sku: itemSku }
+        requestBody.amount = Number(itemEffectValue)
       }
 
       // 🔥 Отправляем запрос на создание инвойса
       const response = await fetch('/api/payments/buy-stars', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: userId,
-          type: purchaseType,
-          itemName: itemName,
-          itemSku: itemSku,
-          price: itemPriceStars,
-          data: purchaseData,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -99,155 +71,106 @@ export function StarsPaymentButton({
         throw new Error('Ссылка на оплату не получена')
       }
 
-      // 🔥 Открываем инвойс
-      const invoiceWindow = window.open(data.invoiceLink, '_blank')
-
-      if (!invoiceWindow) {
-        throw new Error(
-          'Не удалось открыть окно оплаты. Разрешите всплывающие окна.',
-        )
+      // 🔥 Нативное открытие инвойса внутри Telegram WebApp
+      if (typeof window !== 'undefined' && tgWebApp?.openInvoice) {
+        tgWebApp.openInvoice(data.invoiceLink, (status: string) => {
+          console.log('⚡ Telegram Invoice status:', status)
+          if (status === 'paid') {
+            onSuccess?.()
+            startPaymentStatusCheck(data.orderId || data.payload)
+          } else if (status === 'cancelled') {
+            setIsLoading(false)
+            setError('Платеж отменен')
+          } else {
+            setIsLoading(false)
+            setError('Ошибка проведения платежа внутри Telegram')
+          }
+        })
+      } else {
+        // Фолбек для тестирования в обычном браузере вне Telegram
+        window.location.href = data.invoiceLink
+        startPaymentStatusCheck(data.orderId || data.payload)
       }
-
-      onSuccess?.()
-      startPaymentStatusCheck(data.payload, data.transactionId)
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Ошибка при покупке'
       console.error('❌ Purchase error:', error)
       setError(errorMessage)
-
-      if (onError) {
-        onError(errorMessage)
-      } else {
-        alert(`❌ ${errorMessage}`)
-      }
-    } finally {
+      if (onError) onError(errorMessage)
+      else alert(`❌ ${errorMessage}`)
       setIsLoading(false)
     }
   }
 
-  const startPaymentStatusCheck = (payload: string, transactionId?: string) => {
+  // Опрос статуса по ID заказа из Prisma
+  const startPaymentStatusCheck = (orderId: string) => {
+    if (!orderId) return
+
     let attempts = 0
-    const maxAttempts = 60
+    const maxAttempts = 30 // 30 попыток * 3 секунды = 1.5 минуты опроса
+
     const intervalId = setInterval(async () => {
       attempts++
 
       try {
         const response = await fetch(
-          `/api/payments/check-status?memo=${payload}&userId=${userId}`,
+          `/api/payments/check-status?orderId=${orderId}&userId=${userId}`,
         )
         const data = await response.json()
 
-        if (data.success && data.status === 'COMPLETED') {
+        if (
+          data.success &&
+          (data.status === 'SUCCESS' || data.status === 'COMPLETED')
+        ) {
           clearInterval(intervalId)
-          console.log('✅ Payment confirmed!')
+          console.log('✅ Payment confirmed in DB!')
           onSuccess?.()
-          alert('✅ Платеж успешно подтвержден!')
-
-          setTimeout(() => {
-            window.location.reload()
-          }, 1000)
+          alert('✅ Покупка успешно зачислена!')
+          window.location.reload()
         }
 
         if (data.status === 'FAILED' || data.status === 'REFUNDED') {
           clearInterval(intervalId)
-          console.warn('⚠️ Payment failed or refunded')
-
-          const errorMessage =
-            data.status === 'FAILED'
-              ? 'Платеж не удался'
-              : 'Платеж был возвращен'
-
-          if (onError) {
-            onError(errorMessage)
-          }
+          setError('Платеж отклонен СУБД')
+          setIsLoading(false)
         }
 
         if (attempts >= maxAttempts) {
           clearInterval(intervalId)
-          console.warn('⚠️ Payment status check timeout')
-
-          if (onError) {
-            onError('Превышено время ожидания подтверждения платежа')
-          }
+          setIsLoading(false)
+          if (onError)
+            onError(
+              'Время ожидания зачисления заказа истекло. Если баланс не обновился, обратитесь в поддержку.',
+            )
         }
       } catch (error) {
         console.error('❌ Status check error:', error)
-
         if (attempts >= maxAttempts) {
           clearInterval(intervalId)
-          if (onError) {
-            onError('Ошибка проверки статуса платежа')
-          }
+          setIsLoading(false)
         }
       }
-    }, 5000)
-
-    return () => clearInterval(intervalId)
+    }, 3000)
   }
 
-  const LoadingContent = () => (
-    <span className="flex items-center gap-2">
-      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-      Обработка...
-    </span>
-  )
-
-  const ErrorContent = () => (
-    <span className="flex items-center gap-2 text-red-300">
-      <span className="text-sm">⚠️</span>
-      Ошибка
-    </span>
-  )
-
   return (
-    <div className="w-full">
-      <button
-        onClick={handlePurchase}
-        disabled={isLoading || disabled}
-        className={`
-          w-full bg-gradient-to-r from-purple-600 to-purple-700 
-          hover:from-purple-700 hover:to-purple-800 
-          text-white font-bold py-2.5 px-4 rounded-xl 
-          shadow-lg shadow-purple-500/30 
-          transition-all duration-200 
-          active:scale-95 
-          text-xs sm:text-sm 
-          flex items-center justify-center gap-2
-          disabled:opacity-50 disabled:cursor-not-allowed
-          focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900
-          ${className}
-        `}
-        aria-label={`Купить ${itemName} за ${itemPriceStars} Stars`}
-      >
-        {isLoading ? (
-          <LoadingContent />
-        ) : error ? (
-          <ErrorContent />
-        ) : children ? (
-          children
-        ) : (
-          <span className="flex items-center gap-2">
-            <span className="text-yellow-400">⭐</span>
-            {itemPriceStars} Stars
-            <span className="text-purple-300 text-[10px] hidden sm:inline">
-              · {itemName}
-            </span>
-          </span>
-        )}
-      </button>
-
-      {error && !onError && (
-        <div className="mt-2 text-xs text-red-400 text-center animate-fadeIn">
-          ❌ {error}
-        </div>
+    <button
+      onClick={handlePurchase}
+      disabled={disabled || isLoading}
+      className={`${className} disabled:opacity-50 relative overflow-hidden`}
+    >
+      {isLoading ? (
+        <span className="flex items-center justify-center gap-2">
+          <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+          Обработка...
+        </span>
+      ) : error ? (
+        <span className="flex items-center justify-center gap-2 text-red-200">
+          ⚠️ Ошибка
+        </span>
+      ) : (
+        children || `Купить за ⭐ ${itemPriceStars}`
       )}
-
-      {isLoading && (
-        <div className="mt-2 text-[10px] text-slate-500 text-center animate-pulse">
-          ⌛ Ожидание подтверждения платежа...
-        </div>
-      )}
-    </div>
+    </button>
   )
 }

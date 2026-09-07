@@ -1,4 +1,3 @@
-// app/api/payments/check-status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
@@ -6,21 +5,34 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const memo = searchParams.get('memo')
+    const orderId = searchParams.get('orderId') // 👈 Добавляем поддержку orderId
     const userId = searchParams.get('userId')
 
-    if (!memo || !userId) {
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Missing required fields: memo, userId' },
+        { error: 'Missing required field: userId' },
         { status: 400 }
       )
     }
 
-    // 🔥 Ищем транзакцию по payload
+    if (!memo && !orderId) {
+      return NextResponse.json(
+        { error: 'Missing selection field: provide either memo or orderId' },
+        { status: 400 }
+      )
+    }
+
+    // 🔥 Составляем гибкое условие поиска
+    const whereCondition: any = { userId: userId }
+    if (orderId) {
+      whereCondition.id = orderId // Ищем по первичному ключу ID транзакции
+    } else if (memo) {
+      whereCondition.payload = memo // Или по текстовому payload
+    }
+
+    // Ищем транзакцию в базе данных Prisma
     const transaction = await prisma.transaction.findFirst({
-      where: {
-        payload: memo,
-        userId: userId,
-      },
+      where: whereCondition,
     })
 
     if (!transaction) {
@@ -32,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      status: transaction.status,
+      status: transaction.status, // Вернет PENDING, SUCCESS, FAILED и т.д.
       transaction: {
         id: transaction.id,
         amount: transaction.amount,

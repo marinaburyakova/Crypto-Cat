@@ -26,6 +26,16 @@ export const PRODUCTS: Product[] = [
     popular: true,
   },
   {
+    id: 'energy_boost_big',
+    name: 'Мега буст энергии',
+    description: 'Полноценное восстановление всей энергии кота',
+    priceStars: 250,
+    priceTon: 2.5,
+    effect: 'add_energy',
+    effectValue: 2500,
+    category: 'energy',
+  },
+  {
     id: 'energy_500',
     name: '500 энергии',
     description: 'Пополняет энергию на 500 единиц',
@@ -56,7 +66,7 @@ export const PRODUCTS: Product[] = [
     category: 'energy',
     popular: true,
   },
-  
+
   // Уровни
   {
     id: 'level_boost',
@@ -78,7 +88,7 @@ export const PRODUCTS: Product[] = [
     effectValue: 3,
     category: 'level',
   },
-  
+
   // VIP
   {
     id: 'vip_7days',
@@ -101,7 +111,7 @@ export const PRODUCTS: Product[] = [
     effectValue: 30,
     category: 'vip',
   },
-  
+
   // Скины
   {
     id: 'skin_legendary',
@@ -113,7 +123,7 @@ export const PRODUCTS: Product[] = [
     effectValue: 'legendary',
     category: 'skin',
   },
-  
+
   // Мега пакеты
   {
     id: 'mega_pack',
@@ -130,12 +140,12 @@ export const PRODUCTS: Product[] = [
 
 // ✅ Функция получения продукта по ID
 export function getProduct(id: string): Product | undefined {
-  return PRODUCTS.find(p => p.id === id)
+  return PRODUCTS.find((p) => p.id === id)
 }
 
 // ✅ Функция получения продуктов по категории
 export function getProductsByCategory(category: string): Product[] {
-  return PRODUCTS.filter(p => p.category === category)
+  return PRODUCTS.filter((p) => p.category === category)
 }
 
 // ✅ Функция получения всех продуктов для магазина

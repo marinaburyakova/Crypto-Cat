@@ -1,7 +1,6 @@
-// components/game/TonPaymentModal.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { ShopItem } from '@/types/shop'
 
@@ -9,7 +8,6 @@ interface TonPaymentModalProps {
   userId: string
   isOpen: boolean
   onClose: () => void
-  // 🔥 Поддерживаем оба варианта
   item?: ShopItem
   itemPriceTon?: string
   itemSku?: string
@@ -29,11 +27,15 @@ export function TonPaymentModal({
   onSuccess,
   onError,
 }: TonPaymentModalProps) {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [status, setStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [payload, setPayload] = useState<string | null>(null)
 
-  // 🔥 Определяем данные товара (из item или из отдельных пропсов)
+  // 🛡️ Хранилище для интервала, чтобы безопасно уничтожить его при закрытии модалки
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
   const getItemData = () => {
     if (item) {
       return {
@@ -55,23 +57,33 @@ export function TonPaymentModal({
     }
   }
 
+  // 🛡️ Гарантированная очистка интервала при закрытии или уничтожении компонента
+  const clearStatusCheck = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }
+
   useEffect(() => {
     if (!isOpen) {
       setStatus('idle')
       setErrorMessage(null)
       setPayload(null)
+      clearStatusCheck() // 👈 Очищаем таймеры при закрытии
     }
+    return () => clearStatusCheck() // 👈 Очищаем таймеры, если компонент удален со страницы
   }, [isOpen])
 
   const handlePayment = async () => {
     setStatus('loading')
     setErrorMessage(null)
+    clearStatusCheck()
 
     try {
       const itemData = getItemData()
       console.log('🔄 Creating TON invoice for:', itemData.name)
 
-      // 🔥 Определяем тип товара
       let type = 'other'
       if (itemData.category === 'energy') type = 'energy'
       else if (itemData.category === 'boost') type = 'boost'
@@ -89,7 +101,8 @@ export function TonPaymentModal({
           itemSku: itemData.sku,
           price: itemData.priceTon,
           data: {
-            amount: itemData.category === 'energy' ? itemData.effectValue : undefined,
+            amount:
+              itemData.category === 'energy' ? itemData.effectValue : undefined,
             effect: itemData.effect,
             value: itemData.effectValue,
           },
@@ -112,29 +125,37 @@ export function TonPaymentModal({
       console.log('✅ Invoice created:', data)
       setPayload(data.payload)
 
-      if (data.invoiceLink) {
+      // 📲 Безопасный переход к кошельку. window.location.href надежнее для Telegram In-App чем window.open
+      if (data.invoiceLink && typeof window !== 'undefined') {
         console.log('🔗 Opening TON invoice:', data.invoiceLink)
-        window.open(data.invoiceLink, '_blank')
+        window.location.href = data.invoiceLink
       }
 
-      // Проверяем статус платежа
       let attempts = 0
-      const maxAttempts = 15
+      const maxAttempts = 20 // Увеличено до 20 попыток (хватит на минуту ожидания)
 
       const checkStatus = async (): Promise<boolean> => {
         try {
           const statusResponse = await fetch(
-            `/api/payments/check-status?memo=${data.payload}&userId=${userId}`
+            `/api/payments/check-status?memo=${data.payload}&userId=${userId}`,
           )
           const statusData = await statusResponse.json()
 
           console.log(`📊 Status check #${attempts + 1}:`, statusData.status)
 
-          if (statusData.status === 'COMPLETED' || statusData.status === 'SUCCESS') {
+          if (
+            statusData.status === 'COMPLETED' ||
+            statusData.status === 'SUCCESS'
+          ) {
             setStatus('success')
+            clearStatusCheck()
             onSuccess()
             return true
-          } else if (statusData.status === 'FAILED' || statusData.status === 'REFUNDED') {
+          } else if (
+            statusData.status === 'FAILED' ||
+            statusData.status === 'REFUNDED'
+          ) {
+            clearStatusCheck()
             throw new Error('Платёж не удался')
           }
           return false
@@ -144,14 +165,16 @@ export function TonPaymentModal({
         }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 5000))
+      // Небольшая начальная пауза перед стартом опроса (пока кошелек открывается)
+      await new Promise((resolve) => setTimeout(resolve, 4000))
 
-      const interval = setInterval(async () => {
+      // Записываем интервал в ref-ссылку для контроля из любой части компонента
+      intervalRef.current = setInterval(async () => {
         attempts++
         const done = await checkStatus()
 
         if (done || attempts >= maxAttempts) {
-          clearInterval(interval)
+          clearStatusCheck()
           if (attempts >= maxAttempts && !done) {
             setStatus('error')
             setErrorMessage('Превышено время ожидания платежа')
@@ -160,6 +183,7 @@ export function TonPaymentModal({
         }
       }, 3000)
     } catch (error) {
+      clearStatusCheck()
       const message = error instanceof Error ? error.message : 'Ошибка оплаты'
       console.error('❌ Payment error:', message)
       setStatus('error')
@@ -173,8 +197,8 @@ export function TonPaymentModal({
   const itemData = getItemData()
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md relative">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md relative shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 transition-colors"
@@ -184,7 +208,7 @@ export function TonPaymentModal({
         </button>
 
         <div className="text-center mb-6">
-          <div className="text-4xl mb-2">₿</div>
+          <div className="text-4xl mb-2">💎</div>
           <h2 className="text-xl font-bold text-white">Оплата TON</h2>
           <p className="text-slate-400 text-sm mt-1">
             {itemData.name} — {itemData.priceTon} TON
@@ -194,7 +218,7 @@ export function TonPaymentModal({
         {status === 'idle' && (
           <button
             onClick={handlePayment}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 rounded-xl transition-colors"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 rounded-xl transition-all active:scale-98"
           >
             Оплатить {itemData.priceTon} TON
           </button>
@@ -205,16 +229,18 @@ export function TonPaymentModal({
             <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
             <p className="text-slate-300 font-medium">Ожидание оплаты...</p>
             <p className="text-slate-500 text-sm mt-1">
-              Откройте кошелёк TON и подтвердите платеж
+              Подтвердите платеж в открывшемся кошельке TON
             </p>
             {payload && (
-              <p className="text-slate-600 text-xs mt-4 break-all">ID: {payload}</p>
+              <p className="text-slate-600 text-[10px] mt-4 break-all">
+                ID: {payload}
+              </p>
             )}
             <button
               onClick={onClose}
-              className="mt-4 text-slate-500 hover:text-slate-300 text-sm transition-colors"
+              className="mt-4 text-slate-500 hover:text-slate-300 text-sm transition-colors block mx-auto underline"
             >
-              Отменить
+              Отменить операцию
             </button>
           </div>
         )}
@@ -222,7 +248,9 @@ export function TonPaymentModal({
         {status === 'success' && (
           <div className="text-center py-4">
             <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-            <p className="text-green-400 font-bold text-lg">✅ Оплата успешна!</p>
+            <p className="text-green-400 font-bold text-lg">
+              ✅ Оплата успешна!
+            </p>
             <p className="text-slate-400 text-sm mt-1">
               Товар активирован. Приятной игры! 🎮
             </p>

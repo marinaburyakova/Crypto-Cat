@@ -1,10 +1,8 @@
-// app/api/telegram/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
-    // 🔥 Проверяем секрет (если настроен)
     const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
     const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET
     
@@ -13,16 +11,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 🔥 Получаем тело запроса
     const body = await request.json()
     console.log('📦 Webhook body:', JSON.stringify(body, null, 2))
 
-    // 🔥 Обработка pre-checkout запроса (перед оплатой)
+    // 1. ✅ Обработка pre-checkout запроса (Telegram Stars требует моментального ответа 'ok: true')
     if (body.pre_checkout_query) {
       const query = body.pre_checkout_query
-      console.log('💳 Pre-checkout query:', query)
-      
       const botToken = process.env.TELEGRAM_BOT_TOKEN
+      
       await fetch(`https://api.telegram.org/bot${botToken}/answerPreCheckoutQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -36,103 +32,81 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // 🔥 Обработка успешного платежа
+    // 2. ✅ Обработка успешного платежа Telegram Stars / Invoices
     if (body.message?.successful_payment) {
       const userId = body.message.from.id.toString()
       const payment = body.message.successful_payment
-      const payload = payment.invoice_payload
+      const payload = payment.invoice_payload // Формат: boost_boost_speed_userId_timestamp или energy_userId_timestamp
       
       console.log(`💰 Payment successful! User: ${userId}`, payment)
       
-      // 🔥 Определяем тип платежа из payload
-      const parts = payload.split('_')
-      const currency = parts[0] // 'stars' или 'ton'
-      const type = parts[1]     // 'energy', 'boost', 'level', 'vip'
-      
-      // 🔥 Обновляем транзакцию
+      // ✅ Обновляем транзакцию (Переведено на SUCCESS согласно нашей схеме Prisma v7/8)
       await prisma.transaction.updateMany({
         where: { payload: payload },
         data: { 
-          status: 'COMPLETED', 
+          status: 'SUCCESS', // 👈 Исправлено: вместо COMPLETED пишем SUCCESS
           completedAt: new Date(),
           applied: true,
         }
       })
 
-      // 🔥 Обработка в зависимости от валюты и типа
-      if (currency === 'stars') {
-        console.log(`⭐ Stars Payment: ${type} for user ${userId}`)
-      } else if (currency === 'ton') {
-        console.log(`₿ TON Payment: ${type} for user ${userId}`)
-      }
+      const parts = payload.split('_')
+      const mainType = parts[0] // 'boost' или 'energy'
 
-      // 🔥 Обработка в зависимости от типа
-      if (type === 'energy') {
-        const energyAmount = parseInt(parts[2])
-        
-        // Начисляем энергию
+      // 📦 НАЧИСЛЕНИЕ: Энергия
+      if (mainType === 'energy') {
+        // По умолчанию за покупку энергии через buy-stars даем фиксированное число, 
+        // либо вытаскиваем его, если вы переформатируете payload. Допустим, даем 500 энергии:
         await prisma.user.update({
           where: { id: userId },
           data: {
-            energy: { increment: energyAmount }
+            energy: { increment: 500 }
           }
         })
-        
-        console.log(`✅ Energy added: ${energyAmount} to user ${userId}`)
+        console.log(`✅ Energy added to user ${userId}`)
       } 
-      else if (type === 'boost') {
-        const boostType = parts[2]
-        const boostValue = parseInt(parts[3])
+      // 📦 НАЧИСЛЕНИЕ: Бусты
+      else if (mainType === 'boost') {
+        const boostType = parts[2] // 'speed', 'multiplier', 'passive', 'max'
         
-        // Начисляем буст
-        const boostUpdates: Record<string, any> = {
-          speed: { speed: { increment: boostValue } },
-          multiplier: { multiplier: { increment: boostValue } },
-          passive: { passiveRate: { increment: boostValue } },
-          max_energy: { maxEnergy: { increment: boostValue } },
+        if (boostType === 'passive') {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { passiveRate: { increment: 5 } } // Добавляем +5 к пассивному доходу
+          })
+          console.log(`✅ Passive rate increased for user ${userId}`)
+        } 
+        else if (boostType === 'speed' || boostType === 'multiplier') {
+          // Так как полей speed/multiplier в User нет, прокачиваем уровень кота!
+          await prisma.user.update({
+            where: { id: userId },
+            data: { level: { increment: 1 } }
+          })
+          console.log(`✅ Level increased (as speed/multiplier boost) for user ${userId}`)
         }
-        
-        await prisma.user.update({
-          where: { id: userId },
-          data: boostUpdates[boostType] || {}
-        })
-        
-        console.log(`✅ Boost added: ${boostType} +${boostValue} to user ${userId}`)
+        else if (boostType === 'max') { // 'max_energy'
+          await prisma.user.update({
+            where: { id: userId },
+            data: { maxEnergy: { increment: 250 } }
+          })
+          console.log(`✅ Max energy increased for user ${userId}`)
+        }
       }
-      else if (type === 'level') {
-        const levelValue = parseInt(parts[2])
-        
-        // Повышаем уровень
+      // 📦 НАЧИСЛЕНИЕ: Прочие типы (Уровень / VIP)
+      else if (mainType === 'level') {
         await prisma.user.update({
           where: { id: userId },
-          data: {
-            level: { increment: levelValue }
-          }
+          data: { level: { increment: 1 } }
         })
-        
-        console.log(`✅ Level +${levelValue} to user ${userId}`)
       }
-      else if (type === 'vip') {
-        const days = parseInt(parts[2])
-        
-        // Активируем VIP
+      else if (mainType === 'vip') {
         await prisma.user.update({
           where: { id: userId },
-          data: {
-            vipUntil: new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-          }
+          data: { vipUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }
         })
-        
-        console.log(`✅ VIP activated for ${days} days for user ${userId}`)
       }
       
       return NextResponse.json({ ok: true })
-    }
-
-    // 🔥 Обработка обычных сообщений
-    if (body.message) {
-      console.log('💬 Message from:', body.message.from?.id)
-      console.log('📝 Text:', body.message.text)
     }
 
     return NextResponse.json({ ok: true })

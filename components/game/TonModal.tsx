@@ -1,4 +1,3 @@
-// components/game/TonModal.tsx
 'use client'
 
 import { X, Loader2, Sparkles } from 'lucide-react'
@@ -24,15 +23,14 @@ export function TonModal({
 
   if (!isOpen) return null
 
+  // Цены строго синхронизированы с бэкенд-файлом products/route.ts
   const BOOSTS = [
     {
       id: 'boost_speed',
       name: 'Буст скорости',
-      description: 'Увеличивает скорость клика',
-      priceTon: 1.5,
+      description: 'Кликай быстрее! Увеличивает скорость клика',
+      priceTon: 1.0,
       icon: '🚀',
-      effect: 'speed',
-      value: 1,
     },
     {
       id: 'boost_multiplier',
@@ -40,8 +38,6 @@ export function TonModal({
       description: 'Каждый клик приносит в 2 раза больше ⭐',
       priceTon: 3.0,
       icon: '💰',
-      effect: 'multiplier',
-      value: 2,
     },
     {
       id: 'boost_passive',
@@ -49,8 +45,6 @@ export function TonModal({
       description: 'Кот приносит звёзды даже когда ты не кликаешь',
       priceTon: 5.0,
       icon: '🏠',
-      effect: 'passive',
-      value: 5,
     },
     {
       id: 'boost_max_energy',
@@ -58,8 +52,6 @@ export function TonModal({
       description: 'Максимальный запас энергии увеличивается',
       priceTon: 4.0,
       icon: '💪',
-      effect: 'max_energy',
-      value: 50,
     },
   ]
 
@@ -73,11 +65,7 @@ export function TonModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: userId,
-          type: 'boost',
-          itemName: boost.name,
-          itemSku: boost.id,
-          price: boost.priceTon.toString(),
-          data: { effect: boost.effect, value: boost.value },
+          itemSku: boost.id, // 👈 Передаем артикул товара для правильной валидации на бэкенде
         }),
       })
 
@@ -87,9 +75,12 @@ export function TonModal({
         throw new Error(data.error || 'Ошибка создания платежа')
       }
 
-      if (data.invoiceLink) {
-        window.open(data.invoiceLink, '_blank')
-        alert('⏳ Ожидайте подтверждение оплаты TON...')
+      // Бэкенд возвращает ссылку на оплату в paymentLink или invoiceLink
+      const link = data.paymentLink || data.invoiceLink
+
+      if (link) {
+        // Безопасный переход к оплате в Tonkeeper / Telegram Wallet
+        window.location.href = link
         onSuccess?.()
         onClose()
       }
@@ -116,8 +107,8 @@ export function TonModal({
         </button>
 
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-2xl shadow-lg shadow-blue-500/30">
-            ₿
+          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-2xl shadow-lg shadow-blue-500/30 font-sans text-white font-bold">
+            TON
           </div>
           <div>
             <h3 className="text-xl font-bold text-white">Купить буст за TON</h3>
@@ -140,11 +131,11 @@ export function TonModal({
                   <span className="text-xs text-slate-400 block">{boost.description}</span>
                 </div>
               </span>
-              <span className="font-bold text-blue-400">
+              <span className="font-bold text-blue-400 min-w-[70px] text-right">
                 {isLoading && selectedBoost === boost.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin inline-block" />
                 ) : (
-                  `${boost.priceTon} ₿`
+                  `${boost.priceTon} TON`
                 )}
               </span>
             </button>
@@ -154,7 +145,7 @@ export function TonModal({
         <div className="mt-4 p-3 bg-slate-800/50 rounded-xl">
           <p className="text-[10px] text-slate-400 text-center flex items-center justify-center gap-2">
             <Sparkles className="w-3 h-3 text-amber-400" />
-            Оплата через Tonkeeper. Откроется кошелек для подтверждения.
+            Оплата через Tonkeeper / Wallet.
           </p>
         </div>
 
