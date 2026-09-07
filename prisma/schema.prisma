@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "library"
 }
 
@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id              String         @id
+  id              String         @id @default(uuid())
   login           String         @unique
   password        String?
   points          BigInt         @default(0)
@@ -21,39 +21,38 @@ model User {
   exp             Int            @default(0)
   vipUntil        DateTime?
   skin            String?        @default("default")
-  totalSpent      Float          @default(0)
+  totalSpent      Float          @default(0) // Сумма реальных трат (TON/STARS)
   transactions    Transaction[]
   chatMessages    ChatMessage[]
   pointHistory    PointHistory[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  @@index([id])
   @@index([level])
   @@index([createdAt])
-  @@index([login])
+  // Убран дублирующий индекс по login, так как @unique уже создает его
 }
 
 model Transaction {
-  id          String            @id @default(uuid())
-  userId      String
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount      Float
-  currency    CurrencyType
-  status      TransactionStatus @default(PENDING)
-  payload     String            @unique  
-  sku         String?                    
-  itemName    String?   
-  applied     Boolean?  @default(false)                 
-  metadata    Json?                       
-  updatedAt   DateTime          @updatedAt
-  completedAt DateTime?
-  createdAt   DateTime          @default(now())
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount       Float             // Для TON/STARS. Если POINTS, можно хранить эквивалент или использовать опциональные поля
+  currency     CurrencyType
+  status       TransactionStatus @default(PENDING)
+  payload      String            @unique
+  sku          String?
+  itemName     String?
+  applied      Boolean?          @default(false)
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  completedAt  DateTime?
+  pointHistory PointHistory?
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
-  @@index([payload]) 
 }
 
 model ChatMessage {
@@ -69,14 +68,15 @@ model ChatMessage {
 }
 
 model PointHistory {
-  id            String    @id @default(cuid())
+  id            String       @id @default(uuid()) // Изменено на uuid для консистентности
   userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount        BigInt    @default(0)
-  type          PointType @default(PURCHASE)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        BigInt       @default(0)
+  type          PointType    @default(PURCHASE)
   description   String
-  transactionId String?   @unique
-  createdAt     DateTime  @default(now())
+  transactionId String?      @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
 
   @@index([userId])
   @@index([type])
@@ -91,10 +91,9 @@ enum CurrencyType {
 
 enum TransactionStatus {
   PENDING
-  SUCCESS
+  SUCCESS   // Объединено (SUCCESS и COMPLETED теперь одна сущность)
   FAILED
   REFUNDED
-  COMPLETED  
 }
 
 enum PointType {
@@ -103,5 +102,5 @@ enum PointType {
   REFERRAL
   SYSTEM
   QUEST
-  BONUS 
+  BONUS
 }

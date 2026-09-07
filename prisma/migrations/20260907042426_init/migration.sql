@@ -2,7 +2,7 @@
 CREATE TYPE "CurrencyType" AS ENUM ('TON', 'STARS', 'POINTS');
 
 -- CreateEnum
-CREATE TYPE "TransactionStatus" AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'COMPLETED');
+CREATE TYPE "TransactionStatus" AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED');
 
 -- CreateEnum
 CREATE TYPE "PointType" AS ENUM ('PURCHASE', 'DAILY_BONUS', 'REFERRAL', 'SYSTEM', 'QUEST', 'BONUS');
@@ -10,6 +10,8 @@ CREATE TYPE "PointType" AS ENUM ('PURCHASE', 'DAILY_BONUS', 'REFERRAL', 'SYSTEM'
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
+    "login" TEXT NOT NULL,
+    "password" TEXT,
     "points" BIGINT NOT NULL DEFAULT 0,
     "unclaimedPoints" BIGINT NOT NULL DEFAULT 0,
     "level" INTEGER NOT NULL DEFAULT 1,
@@ -39,9 +41,9 @@ CREATE TABLE "Transaction" (
     "itemName" TEXT,
     "applied" BOOLEAN DEFAULT false,
     "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "completedAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Transaction_pkey" PRIMARY KEY ("id")
 );
@@ -71,7 +73,7 @@ CREATE TABLE "PointHistory" (
 );
 
 -- CreateIndex
-CREATE INDEX "User_id_idx" ON "User"("id");
+CREATE UNIQUE INDEX "User_login_key" ON "User"("login");
 
 -- CreateIndex
 CREATE INDEX "User_level_idx" ON "User"("level");
@@ -90,9 +92,6 @@ CREATE INDEX "Transaction_status_idx" ON "Transaction"("status");
 
 -- CreateIndex
 CREATE INDEX "Transaction_createdAt_idx" ON "Transaction"("createdAt");
-
--- CreateIndex
-CREATE INDEX "Transaction_payload_idx" ON "Transaction"("payload");
 
 -- CreateIndex
 CREATE INDEX "ChatMessage_userId_idx" ON "ChatMessage"("userId");
@@ -120,3 +119,6 @@ ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_userId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "PointHistory" ADD CONSTRAINT "PointHistory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PointHistory" ADD CONSTRAINT "PointHistory_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "Transaction"("id") ON DELETE SET NULL ON UPDATE CASCADE;
