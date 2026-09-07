@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { PRODUCTS } from '@/config/products' // 👈 Читаем отсюда
-
+import { PRODUCTS } from '@/config/products'
 export async function GET() {
   try {
     return NextResponse.json({

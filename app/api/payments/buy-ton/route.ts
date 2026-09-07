@@ -20,19 +20,27 @@ export async function POST(request: NextRequest) {
       let lookupSku = itemSku
 
       // Фолбеки для старых модалок бустов
-      if (lookupSku === 'speed' || lookupSku === 'boost_speed' || lookupSku === 'energy_boost' || lookupSku === 'level_up') lookupSku = 'level_boost'
       if (
         lookupSku === 'speed' ||
         lookupSku === 'boost_speed' ||
-        lookupSku === 'energy_boost'
-      )
+        lookupSku === 'energy_boost' ||
+        lookupSku === 'level_up'
+      ) {
         lookupSku = 'level_boost'
-      if (lookupSku === 'multiplier' || lookupSku === 'boost_multiplier')
+      }
+      if (
+        lookupSku === 'multiplier' ||
+        lookupSku === 'boost_multiplier' ||
+        lookupSku === 'energy_boost_big'
+      ) {
         lookupSku = 'level_boost_big'
-      if (lookupSku === 'passive' || lookupSku === 'boost_passive')
+      }
+      if (lookupSku === 'passive' || lookupSku === 'boost_passive') {
         lookupSku = 'vip_7days'
-      if (lookupSku === 'max_energy' || lookupSku === 'boost_max_energy')
+      }
+      if (lookupSku === 'max_energy' || lookupSku === 'boost_max_energy') {
         lookupSku = 'energy_1000'
+      }
 
       const product = PRODUCTS.find((p) => p.id === lookupSku)
       if (!product) {

@@ -33,6 +33,55 @@ export function StarsPaymentButton({
 }: StarsPaymentButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showFallbackMessage, setShowFallbackMessage] = useState<string | null>(
+    null,
+  )
+
+  // ✅ Проверка поддержки openInvoice
+  const isOpenInvoiceSupported = (tgWebApp: any): boolean => {
+    if (!tgWebApp) return false
+
+    // Проверяем наличие метода
+    if (typeof tgWebApp.openInvoice !== 'function') return false
+
+    // Проверяем версию WebApp (для Stars нужна 6.1+)
+    const version = tgWebApp.version || '6.0'
+    const [major, minor] = version.split('.').map(Number)
+    return major > 6 || (major === 6 && minor >= 1)
+  }
+
+  // ✅ БЕЗОПАСНЫЙ показ сообщений - используем только alert или кастомный UI
+  const showMessage = (message: string, isError: boolean = false) => {
+    // Пытаемся использовать Telegram WebApp только для Haptic (безопасно)
+    const tgWebApp =
+      typeof window !== 'undefined'
+        ? (window as any).Telegram?.WebApp
+        : undefined
+
+    // Пробуем использовать Haptic для вибрации (безопасно в 6.0)
+    if (tgWebApp?.HapticFeedback?.notificationOccurred) {
+      try {
+        tgWebApp.HapticFeedback.notificationOccurred(
+          isError ? 'error' : 'success',
+        )
+      } catch (e) {
+        // Игнорируем ошибки Haptic
+      }
+    }
+
+    // ✅ Используем обычный alert - он гарантированно работает везде
+    // Для улучшения UX можно использовать кастомный UI
+    alert(message)
+  }
+
+  // ✅ Показ через кастомный UI (если хотите красивый тост)
+  const showCustomMessage = (message: string, isError: boolean = false) => {
+    setShowFallbackMessage(message)
+    setTimeout(() => setShowFallbackMessage(null), 3000)
+
+    // Также дублируем в alert для надежности
+    alert(message)
+  }
 
   const handlePurchase = async () => {
     setError(null)
@@ -44,7 +93,10 @@ export function StarsPaymentButton({
       if (itemPriceStars <= 0) throw new Error('Некорректная цена товара')
 
       // 🔥 Безопасное получение WebApp API внутри функции (защита от падения SSR)
-      const tgWebApp = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : undefined
+      const tgWebApp =
+        typeof window !== 'undefined'
+          ? (window as any).Telegram?.WebApp
+          : undefined
 
       // 🔥 Корректно подготавливаем body под наш бэкенд
       const requestBody: any = { userId, itemSku }
@@ -71,24 +123,52 @@ export function StarsPaymentButton({
         throw new Error('Ссылка на оплату не получена')
       }
 
-      // 🔥 Нативное открытие инвойса внутри Telegram WebApp
-      if (typeof window !== 'undefined' && tgWebApp?.openInvoice) {
+      // ✅ Проверяем поддержку openInvoice
+      const isSupported = isOpenInvoiceSupported(tgWebApp)
+
+      console.log(
+        '📱 Telegram WebApp version:',
+        tgWebApp?.version || 'not available',
+      )
+      console.log('📱 openInvoice supported:', isSupported)
+
+      // 🔥 Открываем инвойс с проверкой поддержки
+      if (typeof window !== 'undefined' && tgWebApp && isSupported) {
+        // ✅ Современный метод - открываем внутри Telegram
         tgWebApp.openInvoice(data.invoiceLink, (status: string) => {
           console.log('⚡ Telegram Invoice status:', status)
+
           if (status === 'paid') {
             onSuccess?.()
             startPaymentStatusCheck(data.orderId || data.payload)
           } else if (status === 'cancelled') {
             setIsLoading(false)
             setError('Платеж отменен')
+            showMessage('Платеж отменен')
+          } else if (status === 'failed') {
+            setIsLoading(false)
+            setError('Платеж не прошел. Попробуйте позже.')
+            showMessage('Платеж не прошел. Попробуйте позже.')
           } else {
             setIsLoading(false)
-            setError('Ошибка проведения платежа внутри Telegram')
+            setError('Ошибка проведения платежа')
+            showMessage('Ошибка проведения платежа')
           }
         })
       } else {
-        // Фолбек для тестирования в обычном браузере вне Telegram
-        window.location.href = data.invoiceLink
+        // ⚠️ Fallback для старых версий или обычного браузера
+
+        // ✅ Используем безопасный показ сообщения
+        showMessage(
+          'Ваша версия Telegram не поддерживает оплату через Stars. ' +
+            'Пожалуйста, обновите Telegram до последней версии или ' +
+            'откройте ссылку в браузере.',
+        )
+
+        // Открываем в новой вкладке (работает везде)
+        window.open(data.invoiceLink, '_blank')
+
+        // Запускаем проверку статуса
         startPaymentStatusCheck(data.orderId || data.payload)
       }
     } catch (error) {
@@ -96,20 +176,24 @@ export function StarsPaymentButton({
         error instanceof Error ? error.message : 'Ошибка при покупке'
       console.error('❌ Purchase error:', error)
       setError(errorMessage)
+
+      // ✅ Используем безопасный показ ошибки
+      showMessage(`❌ ${errorMessage}`)
+
       if (onError) onError(errorMessage)
-      else alert(`❌ ${errorMessage}`)
       setIsLoading(false)
     }
   }
 
-  // Опрос статуса по ID заказа из Prisma
+  // ✅ Улучшенный опрос статуса
   const startPaymentStatusCheck = (orderId: string) => {
     if (!orderId) return
 
     let attempts = 0
-    const maxAttempts = 30 // 30 попыток * 3 секунды = 1.5 минуты опроса
+    const maxAttempts = 30
+    let intervalId: NodeJS.Timeout | null = null
 
-    const intervalId = setInterval(async () => {
+    const checkStatus = async () => {
       attempts++
 
       try {
@@ -118,59 +202,84 @@ export function StarsPaymentButton({
         )
         const data = await response.json()
 
+        if (response.status === 404) {
+          console.log('⏳ Transaction not found yet, waiting...')
+          return
+        }
+
+        if (!response.ok) {
+          console.error('❌ Status check failed:', data.error)
+          return
+        }
+
         if (
           data.success &&
           (data.status === 'SUCCESS' || data.status === 'COMPLETED')
         ) {
-          clearInterval(intervalId)
+          if (intervalId) clearInterval(intervalId)
           console.log('✅ Payment confirmed in DB!')
           onSuccess?.()
-          alert('✅ Покупка успешно зачислена!')
+
+          showMessage('✅ Покупка успешно зачислена!')
           window.location.reload()
         }
 
         if (data.status === 'FAILED' || data.status === 'REFUNDED') {
-          clearInterval(intervalId)
-          setError('Платеж отклонен СУБД')
+          if (intervalId) clearInterval(intervalId)
+          setError('Платеж отклонен')
           setIsLoading(false)
+          showMessage('❌ Платеж был отклонен. Попробуйте снова.')
         }
 
         if (attempts >= maxAttempts) {
-          clearInterval(intervalId)
+          if (intervalId) clearInterval(intervalId)
           setIsLoading(false)
-          if (onError)
-            onError(
-              'Время ожидания зачисления заказа истекло. Если баланс не обновился, обратитесь в поддержку.',
-            )
+          const errorMsg =
+            'Время ожидания зачисления истекло. Если баланс не обновился, обратитесь в поддержку.'
+          setError(errorMsg)
+          if (onError) onError(errorMsg)
+          showMessage(errorMsg)
         }
       } catch (error) {
         console.error('❌ Status check error:', error)
         if (attempts >= maxAttempts) {
-          clearInterval(intervalId)
+          if (intervalId) clearInterval(intervalId)
           setIsLoading(false)
         }
       }
-    }, 3000)
+    }
+
+    intervalId = setInterval(checkStatus, 3000)
+    setTimeout(checkStatus, 500)
   }
 
   return (
-    <button
-      onClick={handlePurchase}
-      disabled={disabled || isLoading}
-      className={`${className} disabled:opacity-50 relative overflow-hidden`}
-    >
-      {isLoading ? (
-        <span className="flex items-center justify-center gap-2">
-          <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-          Обработка...
-        </span>
-      ) : error ? (
-        <span className="flex items-center justify-center gap-2 text-red-200">
-          ⚠️ Ошибка
-        </span>
-      ) : (
-        children || `Купить за ⭐ ${itemPriceStars}`
+    <>
+      <button
+        onClick={handlePurchase}
+        disabled={disabled || isLoading}
+        className={`${className} disabled:opacity-50 relative overflow-hidden`}
+      >
+        {isLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+            Обработка...
+          </span>
+        ) : error ? (
+          <span className="flex items-center justify-center gap-2 text-red-200">
+            ⚠️ {error}
+          </span>
+        ) : (
+          children || `Купить за ⭐ ${itemPriceStars}`
+        )}
+      </button>
+
+      {/* ✅ Кастомное уведомление (опционально) */}
+      {showFallbackMessage && (
+        <div className="fixed bottom-4 left-4 right-4 bg-gray-800 text-white p-4 rounded-lg shadow-lg z-50 animate-fade-in">
+          {showFallbackMessage}
+        </div>
       )}
-    </button>
+    </>
   )
 }
