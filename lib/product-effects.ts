@@ -121,7 +121,7 @@ export async function applyProductEffect({
     where: { id: transactionId },
     data: {
       applied: true,
-      status: 'COMPLETED',
+      status: 'SUCCESS',
       completedAt: new Date(),
     },
   })
